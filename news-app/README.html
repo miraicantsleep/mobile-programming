@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>News App - REST API &amp; Retrofit</title>
+</head>
+<body>
+
+<div style="text-align: left;">Nama: Muhammad Nabil Afrizal Rahmadani</div>
+<div style="text-align: left;">NRP: 5025231014</div>
+
+<h1>Project 5 - News App (REST API &amp; Retrofit)</h1>
+
+<blockquote>
+Referensi: <a href="https://kuliahppb.blogspot.com/2026/06/rest-api.html" target="_blank">REST API – kuliahppb.blogspot.com</a>
+</blockquote>
+
+<p>Aplikasi berita modern yang mengambil data dari REST API (NewsAPI) menggunakan Retrofit untuk komunikasi HTTP dan menampilkannya dengan Jetpack Compose. Arsitektur yang digunakan adalah MVVM dengan StateFlow dan Kotlin Coroutines sebagai lapisan reaktif. Pengguna dapat melihat berita utama di Home, membaca detail artikel, dan mencari berita berdasarkan kata kunci.</p>
+
+<h2>Konsep yang Digunakan</h2>
+
+<h3>REST API &amp; HTTP GET</h3>
+<p>REST API adalah standar komunikasi antara aplikasi Android (client) dan server menggunakan protokol HTTP. Proyek ini menggunakan dua endpoint dari NewsAPI:</p>
+<ul>
+  <li><code>GET https://newsapi.org/v2/top-headlines?country=us&amp;apiKey=...</code> — mengambil berita utama untuk layar Home.</li>
+  <li><code>GET https://newsapi.org/v2/everything?q=keyword&amp;apiKey=...</code> — mencari berita berdasarkan kata kunci di layar Search.</li>
+</ul>
+<p>Server merespons dengan JSON yang di-parse otomatis oleh Gson menjadi data class Kotlin (<code>NewsResponse</code>, <code>Article</code>).</p>
+
+<h3>Retrofit + Gson Converter</h3>
+<p>Retrofit adalah library HTTP client untuk Android yang mengubah antarmuka Kotlin (<code>ApiService</code>) menjadi HTTP request secara otomatis. <code>GsonConverterFactory</code> bertugas mengkonversi JSON response menjadi objek Kotlin. OkHttp <code>HttpLoggingInterceptor</code> digunakan untuk mencetak log HTTP request/response saat debugging.</p>
+
+<h3>Arsitektur MVVM</h3>
+<p>Alur data: UI (Composable) → ViewModel → Repository → ApiService → REST API. Setiap lapisan hanya bergantung pada lapisan di bawahnya — UI tidak pernah menyentuh Retrofit secara langsung. ViewModel menyimpan state UI, Repository bertugas mengambil data dan menangani error, ApiService mendefinisikan endpoint.</p>
+
+<h3>StateFlow + Coroutines</h3>
+<p><code>StateFlow&lt;NewsUiState&gt;</code> menyimpan state UI yang dapat diobservasi. Setiap kali data berubah, UI otomatis merender ulang. Pemanggilan API dijalankan di <code>viewModelScope</code> dengan <code>Dispatchers.IO</code> agar tidak memblokir Main thread.</p>
+
+<h3>Sealed Interface sebagai UI State (Loading / Success / Error)</h3>
+<p><code>NewsUiState</code> dimodelkan sebagai sealed interface dengan tiga kemungkinan: <code>Loading</code>, <code>Success(articles)</code>, dan <code>Error(message)</code>. Pola ini memaksa UI untuk menangani semua kemungkinan state secara eksplisit di blok <code>when</code>, sekaligus menghilangkan kebutuhan field <code>isLoading: Boolean</code> dan <code>errorMessage: String?</code> yang terpisah.</p>
+
+<h3>Coil — Async Image Loading</h3>
+<p>Coil (<code>coil-compose</code>) digunakan untuk memuat gambar dari URL (<code>urlToImage</code>) secara asinkron ke dalam <code>AsyncImage</code>. Coil menangani caching, placeholder, dan error secara otomatis sehingga kode UI tetap ringkas.</p>
+
+<h3>Navigasi dengan NavHost</h3>
+<p>Tiga rute didefinisikan: <code>home</code>, <code>search</code>, dan <code>detail</code>. Satu <code>NewsViewModel</code> dibagikan ke semua screen sehingga artikel yang dipilih dapat dibaca di <code>DetailScreen</code> tanpa harus dikirim sebagai argumen navigasi.</p>
+
+<hr>
+
+<h2>Penjelasan Kode</h2>
+
+<h3>data/model/Article.kt</h3>
+
+<pre><code>data class Source(val id: String?, val name: String?)
+
+data class Article(
+    val source: Source?,
+    val author: String?,
+    val title: String?,
+    val description: String?,
+    val url: String?,
+    @SerializedName("urlToImage") val urlToImage: String?,
+    @SerializedName("publishedAt") val publishedAt: String?,
+    val content: String?
+)</code></pre>
+
+<p><code>Article</code> adalah representasi satu artikel berita yang diterima dari NewsAPI. Semua field bersifat nullable (<code>?</code>) karena NewsAPI kadang tidak menyertakan semua field — misalnya <code>author</code> bisa <code>null</code> jika tidak diketahui. <code>@SerializedName</code> digunakan untuk field yang nama JSON-nya (<code>urlToImage</code>, <code>publishedAt</code>) tidak cocok dengan konvensi Kotlin camelCase biasa.</p>
+
+<h3>data/model/NewsResponse.kt</h3>
+
+<pre><code>data class NewsResponse(
+    val status: String,
+    val totalResults: Int,
+    val articles: List&lt;Article&gt;
+)</code></pre>
+
+<p>Objek wrapper yang dibuat Gson dari respons JSON NewsAPI. Field <code>status</code> bernilai <code>"ok"</code> jika request berhasil — Repository memeriksa nilai ini sebelum meneruskan data ke ViewModel.</p>
+
+<h3>data/api/ApiService.kt</h3>
+
+<pre><code>interface ApiService {
+    @GET("v2/top-headlines")
+    suspend fun getTopHeadlines(
+        @Query("country") country: String = "us",
+        @Query("category") category: String? = null,
+        @Query("apiKey") apiKey: String
+    ): NewsResponse
+
+    @GET("v2/everything")
+    suspend fun searchNews(
+        @Query("q") query: String,
+        @Query("sortBy") sortBy: String = "publishedAt",
+        @Query("apiKey") apiKey: String
+    ): NewsResponse
+}</code></pre>
+
+<p>Interface ini adalah "kontrak" API yang dibaca Retrofit untuk membuat implementasi HTTP secara otomatis. Anotasi <code>@GET</code> menentukan path endpoint, <code>@Query</code> menambahkan query parameter ke URL. Fungsi bersifat <code>suspend</code> sehingga dapat dipanggil dari dalam Coroutine tanpa memblokir thread.</p>
+
+<h3>data/api/RetrofitClient.kt</h3>
+
+<pre><code>object RetrofitClient {
+    // TODO: Ganti dengan API key dari https://newsapi.org/register
+    const val API_KEY = "YOUR_API_KEY_HERE"
+    private const val BASE_URL = "https://newsapi.org/"
+
+    private val okHttpClient = OkHttpClient.Builder()
+        .addInterceptor(HttpLoggingInterceptor().apply {
+            level = HttpLoggingInterceptor.Level.BODY
+        })
+        .build()
+
+    val apiService: ApiService by lazy {
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(okHttpClient)
+            .addConverterFactory(GsonConverterFactory.create())
+            .build()
+            .create(ApiService::class.java)
+    }
+}</code></pre>
+
+<p><code>object</code> Kotlin memastikan hanya ada satu instance Retrofit di seluruh aplikasi (singleton). <code>by lazy</code> membuat <code>apiService</code> baru dibuat saat pertama kali diakses, bukan saat aplikasi launch — menghemat resource startup. <code>LoggingInterceptor</code> dengan level <code>BODY</code> mencetak seluruh request dan response ke Logcat saat debugging.</p>
+<p><strong>Penting:</strong> Ganti nilai <code>API_KEY</code> dengan kunci dari <a href="https://newsapi.org/register" target="_blank">newsapi.org/register</a> sebelum menjalankan aplikasi.</p>
+
+<h3>data/repository/NewsRepository.kt</h3>
+
+<pre><code>class NewsRepository {
+    suspend fun getTopHeadlines(country: String = "us"): Result&lt;List&lt;Article&gt;&gt; {
+        return try {
+            val response = api.getTopHeadlines(country = country, apiKey = apiKey)
+            if (response.status == "ok") {
+                Result.success(response.articles)
+            } else {
+                Result.failure(Exception("API error: ${response.status}"))
+            }
+        } catch (e: Exception) {
+            Result.failure(Exception("Failed to load news: ${e.message}"))
+        }
+    }
+}</code></pre>
+
+<p>Repository adalah satu-satunya tempat yang menyentuh <code>ApiService</code>. Blok <code>try/catch</code> menangkap semua kemungkinan error: timeout jaringan, JSON parse error, HTTP 4xx/5xx, dll — semuanya dibungkus menjadi <code>Result.failure()</code> dengan pesan yang ramah. ViewModel tidak perlu tahu bagaimana data diambil, hanya menerima <code>Result&lt;List&lt;Article&gt;&gt;</code>.</p>
+
+<h3>viewmodel/NewsViewModel.kt</h3>
+
+<pre><code>sealed interface NewsUiState {
+    object Loading : NewsUiState
+    data class Success(val articles: List&lt;Article&gt;) : NewsUiState
+    data class Error(val message: String) : NewsUiState
+}
+
+class NewsViewModel : ViewModel() {
+    private val _homeState = MutableStateFlow&lt;NewsUiState&gt;(NewsUiState.Loading)
+    val homeState: StateFlow&lt;NewsUiState&gt; = _homeState.asStateFlow()
+
+    fun loadTopHeadlines() {
+        viewModelScope.launch(Dispatchers.IO) {
+            _homeState.value = NewsUiState.Loading
+            val result = repository.getTopHeadlines()
+            _homeState.value = result.fold(
+                onSuccess = { NewsUiState.Success(it) },
+                onFailure = { NewsUiState.Error(it.message ?: "Unknown error") }
+            )
+        }
+    }
+}</code></pre>
+
+<p><code>sealed interface NewsUiState</code> membuat tiga state yang saling eksklusif. Blok <code>when(state)</code> di UI <em>harus</em> menangani semua cabang — compiler mewajibkannya, sehingga tidak ada state yang terlewat. <code>MutableStateFlow</code> yang di-expose sebagai <code>StateFlow</code> (read-only) melindungi state dari modifikasi luar. <code>viewModelScope.launch(Dispatchers.IO)</code> menjalankan network call di thread IO pool, hasilnya dikembalikan ke Main thread melalui StateFlow.</p>
+
+<p><code>selectArticle(article)</code> menyimpan artikel yang dipilih ke <code>_selectedArticle: MutableStateFlow&lt;Article?&gt;</code> sehingga <code>DetailScreen</code> dapat membacanya tanpa perlu meneruskan objek <code>Article</code> sebagai argumen navigasi (yang memerlukan <code>Parcelable</code>).</p>
+
+<h3>ui/components/NewsCard.kt</h3>
+
+<pre><code>@Composable
+fun FeaturedNewsCard(article: Article, onClick: () -> Unit) {
+    Card(modifier = Modifier.fillMaxWidth().height(220.dp).clickable(onClick = onClick)) {
+        Box {
+            AsyncImage(model = article.urlToImage, contentScale = ContentScale.Crop, ...)
+            Box(modifier = Modifier.background(
+                Brush.verticalGradient(
+                    colors = listOf(Color.Transparent, Color.Black.copy(alpha = 0.75f)),
+                    startY = 80f
+                )
+            ))
+            Column(modifier = Modifier.align(Alignment.BottomStart)) {
+                // category badge + title + time
+            }
+        }
+    }
+}</code></pre>
+
+<p><code>FeaturedNewsCard</code> — kartu besar untuk artikel pertama di Home. <code>Brush.verticalGradient</code> membuat overlay gradasi hitam dari transparan ke gelap, sehingga teks (judul, badge kategori) tetap terbaca di atas gambar apapun. <code>AsyncImage</code> dari Coil memuat gambar secara asinkron; <code>ContentScale.Crop</code> memastikan gambar mengisi area kartu tanpa distorsi.</p>
+<p><code>NewsListItem</code> — baris ringkas dengan thumbnail kecil (88×88dp) di sebelah kiri dan judul + sumber + waktu di sebelah kanan, digunakan di Breaking News list dan Search results.</p>
+
+<h3>ui/screens/HomeScreen.kt</h3>
+
+<pre><code>when (val state = uiState) {
+    is NewsUiState.Loading -&gt; {
+        CircularProgressIndicator()
+        Text("Loading...")
+    }
+    is NewsUiState.Success -&gt; {
+        LazyColumn {
+            item { FeaturedNewsCard(articles.first(), ...) }
+            item { Text("Breaking News") }
+            itemsIndexed(articles.drop(1)) { _, article -&gt;
+                NewsListItem(article, ...)
+            }
+        }
+    }
+    is NewsUiState.Error -&gt; {
+        Text("Failed to load news.")
+        Button(onClick = { viewModel.loadTopHeadlines() }) { Text("Retry") }
+    }
+}</code></pre>
+
+<p>Layar utama menampilkan satu <code>FeaturedNewsCard</code> untuk artikel pertama, diikuti header "Breaking News" dan daftar artikel selanjutnya menggunakan <code>NewsListItem</code>. Tombol Refresh di TopAppBar memanggil <code>viewModel.refresh()</code> yang identik dengan <code>loadTopHeadlines()</code>. Saat API gagal, blok Error menampilkan pesan error dan tombol Retry.</p>
+
+<h3>ui/screens/DetailScreen.kt</h3>
+
+<pre><code>Scaffold(topBar = {
+    TopAppBar(
+        title = { Text("Detail News") },
+        navigationIcon = { IconButton(onClick = onBack) { Icon(ArrowBack) } },
+        actions = {
+            IconButton(onClick = { isBookmarked = !isBookmarked }) { ... }
+            IconButton(onClick = { /* share intent */ }) { Icon(Share) }
+        }
+    )
+}) {
+    Column(modifier = Modifier.verticalScroll(...)) {
+        AsyncImage(urlToImage, height = 220.dp)
+        // category badge, title, author, divider, body text
+    }
+}</code></pre>
+
+<p>Detail menampilkan gambar hero penuh lebar, badge kategori, judul besar, baris author + waktu, dan body artikel. Body diambil dari <code>article.content</code> jika tersedia (memotong suffix <code>[+N chars]</code> dari NewsAPI), fallback ke <code>description</code>. Tombol share menggunakan <code>Intent.ACTION_SEND</code> sistem Android — membuka sheet pilihan aplikasi berbagi. Bookmark adalah local visual toggle dengan <code>mutableStateOf</code> (tidak persisten ke storage).</p>
+
+<h3>ui/screens/SearchScreen.kt</h3>
+
+<pre><code>OutlinedTextField(
+    value = query,
+    onValueChange = {
+        query = it
+        if (it.length >= 2) viewModel.search(it)
+        else if (it.isEmpty()) viewModel.clearSearch()
+    },
+    ...
+)</code></pre>
+
+<p>Search dimulai otomatis saat panjang teks minimal 2 karakter — menghindari query terlalu pendek yang menghasilkan jutaan hasil. <code>viewModel.clearSearch()</code> mereset <code>_searchState</code> ke <code>null</code> saat field dikosongkan, sehingga layar kembali ke prompt "Type to search news…". <code>FocusRequester</code> otomatis memfokuskan keyboard saat screen dibuka.</p>
+
+<h3>util/DateUtil.kt</h3>
+
+<pre><code>fun formatPublishedAt(publishedAt: String?): String {
+    val date = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).parse(publishedAt)
+    val diffMin = (Date().time - date.time) / 60_000
+    return when {
+        diffMin &lt; 60   -&gt; "${diffMin}m ago"
+        diffMin &lt; 1440 -&gt; "${diffMin / 60}h ago"
+        else           -&gt; "${diffMin / 1440}d ago"
+    }
+}</code></pre>
+
+<p>Mengkonversi timestamp ISO-8601 dari NewsAPI (misal <code>"2026-06-15T09:00:00Z"</code>) menjadi label relatif seperti <code>"3h ago"</code> atau <code>"2d ago"</code>. <code>try/catch</code> menangani format tidak valid — jika gagal di-parse, dikembalikan 10 karakter pertama string (tanggal kasar).</p>
+
+<h3>MainActivity.kt</h3>
+
+<pre><code>val navController = rememberNavController()
+val viewModel: NewsViewModel = viewModel()
+
+NavHost(navController = navController, startDestination = "home") {
+    composable("home") {
+        HomeScreen(viewModel, onArticleClick = { navController.navigate("detail") }, ...)
+    }
+    composable("search") {
+        SearchScreen(viewModel, onArticleClick = { navController.navigate("detail") }, ...)
+    }
+    composable("detail") {
+        val article = viewModel.selectedArticle.value
+        if (article != null) DetailScreen(article, onBack = { navController.popBackStack() })
+    }
+}</code></pre>
+
+<p>Satu instance <code>NewsViewModel</code> dibuat di <code>MainActivity</code> dan diteruskan ke semua screen — ini memungkinkan berbagi state (terutama <code>selectedArticle</code>) antar rute tanpa serialisasi Parcelable. <code>navController.popBackStack()</code> di <code>DetailScreen</code> dan <code>SearchScreen</code> mengembalikan user ke layar sebelumnya.</p>
+
+<hr>
+
+<h2>Referensi</h2>
+<ul>
+  <li><a href="https://kuliahppb.blogspot.com/2026/06/rest-api.html" target="_blank">REST API – kuliahppb.blogspot.com</a></li>
+  <li><a href="https://newsapi.org/" target="_blank">NewsAPI – newsapi.org</a></li>
+  <li><a href="https://github.com/codepath/android_guides/wiki/Consuming-APIs-with-Retrofit" target="_blank">Consuming APIs with Retrofit – CodePath Android Guides</a></li>
+  <li><a href="https://polinema-mobile.github.io/09/01-retrofit-get.html" target="_blank">Retrofit GET – Polinema Mobile</a></li>
+  <li><a href="https://github.com/miraicantsleep/mobile-programming/tree/master/news-app" target="_blank">Source Code – github.com/miraicantsleep/mobile-programming/news-app</a></li>
+</ul>
+
+</body>
+</html>

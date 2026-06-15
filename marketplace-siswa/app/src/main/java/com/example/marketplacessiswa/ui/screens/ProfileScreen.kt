@@ -27,7 +27,7 @@ fun ProfileScreen() {
             tint = Color.LightGray
         )
         Spacer(modifier = Modifier.height(8.dp))
-        Text("John Siswa", fontSize = 20.sp, fontWeight = FontWeight.Bold)
-        Text("XII RPL 1", color = Color.Gray)
+        Text("Nabil Afrizal", fontSize = 20.sp, fontWeight = FontWeight.Bold)
+        Text("Teknik Informatika ITS", color = Color.Gray)
     }
 }
