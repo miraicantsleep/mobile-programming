@@ -100,8 +100,7 @@ data class Article(
 <h3>data/api/RetrofitClient.kt</h3>
 
 <pre><code>object RetrofitClient {
-    // TODO: Ganti dengan API key dari https://newsapi.org/register
-    const val API_KEY = "YOUR_API_KEY_HERE"
+    const val API_KEY = "YOUR_API_KEY_HERE"  // isi dengan key dari newsapi.org/register
     private const val BASE_URL = "https://newsapi.org/"
 
     private val okHttpClient = OkHttpClient.Builder()
@@ -219,23 +218,41 @@ fun FeaturedNewsCard(article: Article, onClick: () -> Unit) {
 
 <h3>ui/screens/DetailScreen.kt</h3>
 
-<pre><code>Scaffold(topBar = {
-    TopAppBar(
-        title = { Text("Detail News") },
-        navigationIcon = { IconButton(onClick = onBack) { Icon(ArrowBack) } },
-        actions = {
-            IconButton(onClick = { isBookmarked = !isBookmarked }) { ... }
-            IconButton(onClick = { /* share intent */ }) { Icon(Share) }
-        }
+<pre><code>// Konten artikel
+if (!article.description.isNullOrBlank()) {
+    Text(
+        text = article.description,
+        fontSize = 15.sp,
+        fontWeight = FontWeight.Medium
     )
-}) {
-    Column(modifier = Modifier.verticalScroll(...)) {
-        AsyncImage(urlToImage, height = 220.dp)
-        // category badge, title, author, divider, body text
-    }
+    Spacer(modifier = Modifier.height(12.dp))
+}
+val snippet = article.content?.substringBefore(" [+")
+if (!snippet.isNullOrBlank() &amp;&amp; snippet != article.description) {
+    Text(text = snippet, fontSize = 15.sp)
+    Text(
+        text = "Konten dipotong oleh NewsAPI (free plan).",
+        fontSize = 12.sp,
+        color = MaterialTheme.colorScheme.onSurfaceVariant
+    )
+}
+if (!article.url.isNullOrBlank()) {
+    Button(
+        onClick = {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(article.url))
+            context.startActivity(intent)
+        },
+        modifier = Modifier.fillMaxWidth()
+    ) { Text("Baca Selengkapnya") }
 }</code></pre>
 
-<p>Detail menampilkan gambar hero penuh lebar, badge kategori, judul besar, baris author + waktu, dan body artikel. Body diambil dari <code>article.content</code> jika tersedia (memotong suffix <code>[+N chars]</code> dari NewsAPI), fallback ke <code>description</code>. Tombol share menggunakan <code>Intent.ACTION_SEND</code> sistem Android — membuka sheet pilihan aplikasi berbagi. Bookmark adalah local visual toggle dengan <code>mutableStateOf</code> (tidak persisten ke storage).</p>
+<p>Detail menampilkan gambar hero penuh lebar, badge kategori (nama sumber di-uppercase), judul besar, dan baris author + waktu relatif.</p>
+<p>Konten artikel ditampilkan dalam dua lapis karena keterbatasan NewsAPI free plan yang memotong field <code>content</code> di ~200 karakter:</p>
+<ol>
+  <li><code>description</code> — ringkasan penuh yang dikirim NewsAPI, ditampilkan dengan <code>FontWeight.Medium</code> sebagai lead paragraph.</li>
+  <li><code>content</code> — snippet badan artikel; suffix <code>" [+N chars]"</code> dipotong dengan <code>substringBefore(" [+")</code>. Ditampilkan hanya jika tidak identik dengan <code>description</code>. Disertai catatan kecil "Konten dipotong oleh NewsAPI (free plan)."</li>
+</ol>
+<p>Tombol <strong>Baca Selengkapnya</strong> membuka URL artikel asli di browser menggunakan <code>Intent.ACTION_VIEW</code> — sehingga pengguna selalu bisa membaca artikel lengkap. Tombol share menggunakan <code>Intent.ACTION_SEND</code> untuk berbagi URL/judul. Ikon favorit adalah visual toggle lokal (<code>var isBookmarked by remember { mutableStateOf(false) }</code>) — tidak persisten ke storage.</p>
 
 <h3>ui/screens/SearchScreen.kt</h3>
 
