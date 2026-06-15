@@ -117,17 +117,43 @@ fun DetailScreen(article: Article, onBack: () -> Unit) {
                 Spacer(modifier = Modifier.height(16.dp))
                 HorizontalDivider()
                 Spacer(modifier = Modifier.height(16.dp))
-                val body = when {
-                    !article.content.isNullOrBlank() -> article.content.substringBefore(" [+")
-                    !article.description.isNullOrBlank() -> article.description
-                    else -> "No content available."
+                if (!article.description.isNullOrBlank()) {
+                    Text(
+                        text = article.description,
+                        fontSize = 15.sp,
+                        lineHeight = 24.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
                 }
-                Text(
-                    text = body,
-                    fontSize = 15.sp,
-                    lineHeight = 24.sp,
-                    color = MaterialTheme.colorScheme.onBackground
-                )
+                val snippet = article.content?.substringBefore(" [+")
+                if (!snippet.isNullOrBlank() && snippet != article.description) {
+                    Text(
+                        text = snippet,
+                        fontSize = 15.sp,
+                        lineHeight = 24.sp,
+                        color = MaterialTheme.colorScheme.onBackground
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = "Konten dipotong oleh NewsAPI (free plan).",
+                        fontSize = 12.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                if (!article.url.isNullOrBlank()) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Button(
+                        onClick = {
+                            val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(article.url))
+                            context.startActivity(intent)
+                        },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text("Baca Selengkapnya")
+                    }
+                }
             }
         }
     }
