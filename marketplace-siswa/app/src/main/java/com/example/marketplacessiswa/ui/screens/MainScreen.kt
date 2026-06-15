@@ -1,5 +1,9 @@
 package com.example.marketplacessiswa.ui.screens
 
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.width
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
@@ -7,10 +11,9 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.width
 import com.example.marketplacessiswa.viewmodel.MarketplaceViewModel
 import kotlinx.coroutines.launch
 
@@ -64,15 +67,13 @@ fun MainScreen(viewModel: MarketplaceViewModel) {
                     contentColor = MaterialTheme.colorScheme.onPrimaryContainer
                 ) {
                     Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(modifier = androidx.compose.ui.Modifier.width(8.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
                     Text("Jual")
                 }
             }
         }
     ) { innerPadding ->
-        androidx.compose.foundation.layout.Box(
-            modifier = androidx.compose.ui.Modifier.padding(innerPadding)
-        ) {
+        Box(modifier = Modifier.padding(innerPadding)) {
             when (currentScreen) {
                 "home" -> HomeScreen(products = viewModel.products)
                 "add" -> AddProductScreen(
