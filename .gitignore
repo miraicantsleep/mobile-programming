@@ -1,0 +1,16 @@
+CLAUDE.md
+.claude/
+
+# Android build artifacts
+**/build/
+**/.gradle/
+**/.idea/
+**/*.iml
+**/local.properties
+**/.DS_Store
+**/captures/
+**/.externalNativeBuild/
+**/.cxx/
+
+# Gradle wrapper jars (keep gradlew scripts)
+**/gradle/wrapper/gradle-wrapper.jar

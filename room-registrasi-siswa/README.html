@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Project 3 - Room Database: Registrasi Siswa</title>
+</head>
+<body>
+
+<h1>Project 3 - Room Database: Registrasi Siswa</h1>
+
+<blockquote>
+Referensi: <a href="https://kuliahppb.blogspot.com/2026/05/room-database-registrasi-siswa.html" target="_blank">Room Database Registrasi Siswa</a>
+</blockquote>
+
+<h2>Konsep yang Digunakan</h2>
+
+<h3>Room Database</h3>
+<p>Room adalah abstraction layer di atas SQLite dari Android Jetpack. Keunggulan dibanding SQLite langsung:</p>
+<ul>
+  <li>Query SQL divalidasi saat kompilasi (bukan saat runtime) — typo langsung ketahuan.</li>
+  <li>Mapping otomatis dari baris tabel ke objek Kotlin via anotasi <code>@Entity</code> dan <code>@Dao</code>.</li>
+  <li>Terintegrasi langsung dengan Kotlin Coroutines dan Flow.</li>
+</ul>
+<p>Tiga komponen utama: <strong>Entity</strong> (model tabel), <strong>DAO</strong> (antarmuka query), <strong>Database</strong> (jembatan ke file SQLite).</p>
+
+<h3>Repository Pattern</h3>
+<p>Lapisan abstraksi antara ViewModel dan sumber data. ViewModel tidak pernah mengakses DAO langsung. Manfaat: jika sumber data berubah (Room ke API), hanya Repository yang perlu diubah. ViewModel dan UI tidak terpengaruh.</p>
+
+<h3>StateFlow + combine + flatMapLatest</h3>
+<p>Pola reaktif untuk menggabungkan beberapa sumber data menjadi satu UI state. <code>flatMapLatest</code> memastikan query lama dibatalkan saat query baru dimulai (saat user mengetik pencarian). <code>combine</code> menggabungkan beberapa Flow menjadi satu nilai output.</p>
+
+<h3>Singleton Pattern</h3>
+<p>Menjamin hanya ada satu instance database di seluruh aplikasi. Membuat instance database berulang kali sangat mahal (costly) karena membuka koneksi file SQLite.</p>
+
+<hr>
+
+<h2>Penjelasan Kode</h2>
+
+<h3>data/local/entity/Siswa.kt</h3>
+
+<pre><code>@Entity(tableName = "siswa")
+data class Siswa(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val nama: String,
+    val email: String,
+    val createdAt: Long = System.currentTimeMillis()
+)</code></pre>
+
+<p><code>@Entity(tableName = "siswa")</code> — Room membuat tabel bernama <code>siswa</code> di SQLite. Room menghasilkan DDL berikut secara otomatis:</p>
+
+<pre><code>CREATE TABLE IF NOT EXISTS `siswa` (
+    `id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+    `nama` TEXT NOT NULL,
+    `email` TEXT NOT NULL,
+    `createdAt` INTEGER NOT NULL
+)</code></pre>
+
+<p><code>@PrimaryKey(autoGenerate = true)</code> — Nilai <code>id</code> diisi otomatis oleh SQLite (auto-increment). Default <code>0</code> agar tidak perlu diisi saat membuat objek baru.</p>
+<p><code>createdAt: Long</code> — Timestamp Unix epoch (milidetik). Digunakan untuk mengurutkan daftar dari terbaru ke terlama (<code>ORDER BY createdAt DESC</code>).</p>
+<p><code>data class</code> — Otomatis menghasilkan <code>equals()</code>, <code>hashCode()</code>, dan <code>copy()</code>. Fungsi <code>copy()</code> sangat penting saat update: <code>siswa.copy(nama = "Baru")</code> mempertahankan <code>id</code> dan <code>createdAt</code> asli.</p>
+
+<h3>data/local/dao/SiswaDao.kt</h3>
+
+<pre><code>@Dao
+interface SiswaDao {
+    @Query("SELECT * FROM siswa ORDER BY createdAt DESC")
+    fun getAllSiswa(): Flow&lt;List&lt;Siswa&gt;&gt;
+
+    @Query("SELECT * FROM siswa WHERE nama LIKE '%' || :query || '%' OR email LIKE '%' || :query || '%'")
+    fun searchSiswa(query: String): Flow&lt;List&lt;Siswa&gt;&gt;
+
+    @Query("SELECT COUNT(*) FROM siswa")
+    fun getSiswaCount(): Flow&lt;Int&gt;
+
+    @Query("SELECT * FROM siswa WHERE id = :id")
+    suspend fun getSiswaById(id: Int): Siswa?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertSiswa(siswa: Siswa): Long
+
+    @Update
+    suspend fun updateSiswa(siswa: Siswa)
+
+    @Delete
+    suspend fun deleteSiswa(siswa: Siswa)
+}</code></pre>
+
+<p>Room menggenerate kelas implementasi konkret dari interface ini saat kompilasi menggunakan KSP.</p>
+<p><code>Flow&lt;List&lt;Siswa&gt;&gt;</code> — Query reaktif: setiap kali data tabel berubah (insert/update/delete), Flow otomatis memancarkan list terbaru tanpa perlu query ulang manual. Tidak butuh <code>suspend</code> karena Flow sudah asinkron.</p>
+<p><code>'%' || :query || '%'</code> — Cara SQLite mengonkatenasi string. Setara dengan <code>LIKE '%kata%'</code>. Mencari di kolom <code>nama</code> dan <code>email</code> menggunakan <code>OR</code>.</p>
+<p><code>@Insert(onConflict = OnConflictStrategy.REPLACE)</code> — Jika ada primary key sama, baris lama dihapus dan diganti (upsert). Return <code>Long</code> adalah rowId baru.</p>
+<p><code>@Update</code> dan <code>@Delete</code> — Room menggenerate SQL berdasarkan primary key secara otomatis: <code>UPDATE siswa SET ... WHERE id = ?</code> dan <code>DELETE FROM siswa WHERE id = ?</code>.</p>
+
+<h3>data/local/AppDatabase.kt</h3>
+
+<pre><code>@Database(entities = [Siswa::class], version = 2, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun siswaDao(): SiswaDao
+
+    companion object {
+        @Volatile private var INSTANCE: AppDatabase? = null
+
+        fun getInstance(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                Room.databaseBuilder(
+                    context.applicationContext,
+                    AppDatabase::class.java,
+                    "registrasi_siswa_db"
+                )
+                .fallbackToDestructiveMigration()
+                .build().also { INSTANCE = it }
+            }
+        }
+    }
+}</code></pre>
+
+<p><code>@Database(entities = [Siswa::class], version = 2)</code> — Mendaftarkan semua entitas (tabel). <code>version</code> harus dinaikkan setiap kali struktur tabel berubah.</p>
+<p><code>abstract class ... : RoomDatabase()</code> — Room mengimplementasikan method abstract menggunakan kode yang dihasilkan KSP.</p>
+<p><strong>Singleton:</strong> <code>@Volatile</code> memastikan tiap thread membaca dari memori utama. <code>synchronized(this)</code> mencegah dua thread membuat instance bersamaan. Pola <code>INSTANCE ?: synchronized { ... }</code> disebut double-checked locking.</p>
+<p><code>fallbackToDestructiveMigration()</code> — Jika versi naik tanpa Migration, Room menghapus dan membuat ulang tabel daripada crash. Cocok untuk fase development.</p>
+
+<h3>data/repository/SiswaRepository.kt</h3>
+
+<pre><code>class SiswaRepository(private val dao: SiswaDao) {
+    fun getAllSiswa(): Flow&lt;List&lt;Siswa&gt;&gt; = dao.getAllSiswa()
+    fun searchSiswa(query: String): Flow&lt;List&lt;Siswa&gt;&gt; = dao.searchSiswa(query)
+    fun getSiswaCount(): Flow&lt;Int&gt; = dao.getSiswaCount()
+    suspend fun insertSiswa(siswa: Siswa): Long = dao.insertSiswa(siswa)
+    suspend fun updateSiswa(siswa: Siswa) = dao.updateSiswa(siswa)
+    suspend fun deleteSiswa(siswa: Siswa) = dao.deleteSiswa(siswa)
+    suspend fun getSiswaById(id: Int): Siswa? = dao.getSiswaById(id)
+}</code></pre>
+
+<p>Saat ini Repository hanya mendelegasikan ke DAO. Nilainya terasa lebih jelas ketika ada beberapa sumber data (Room + API + cache) — semua logika penggabungan cukup ditulis sekali di sini.</p>
+
+<h3>viewmodel/SiswaViewModel.kt</h3>
+
+<pre><code>val siswaList: StateFlow&lt;List&lt;Siswa&gt;&gt; = _searchQuery
+    .flatMapLatest { query -&gt;
+        if (query.isBlank()) repository.getAllSiswa()
+        else repository.searchSiswa(query)
+    }
+    .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())</code></pre>
+
+<p><code>flatMapLatest</code> — Setiap kali <code>_searchQuery</code> memancarkan nilai baru (user mengetik), subscription Flow sebelumnya dibatalkan dan diganti dengan Flow baru. Mencegah hasil pencarian lama datang setelah hasil baru.</p>
+
+<pre><code>val uiState: StateFlow&lt;SiswaUiState&gt; = combine(
+    siswaList, _searchQuery, _isLoading, _uiMessages, totalSiswa
+) { list, query, loading, messages, total -&gt;
+    SiswaUiState(
+        siswaList = list, searchQuery = query, isLoading = loading,
+        errorMessage = messages.first, successMessage = messages.second, totalSiswa = total
+    )
+}.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), SiswaUiState())</code></pre>
+
+<p><code>combine(5 flows)</code> — Menggabungkan 5 Flow berbeda menjadi satu <code>SiswaUiState</code>. Setiap kali salah satu berubah, <code>combine</code> mengeksekusi lambda untuk membentuk state baru.</p>
+<p><code>SharingStarted.WhileSubscribed(5000)</code> — Flow tetap aktif 5 detik setelah subscriber terakhir berhenti. Ini menangani rotasi layar tanpa query ulang ke database.</p>
+
+<pre><code>fun tambahSiswa(nama: String, email: String) {
+    if (nama.isBlank()) {
+        _uiMessages.value = Pair("Nama tidak boleh kosong", null)
+        return
+    }
+    viewModelScope.launch {
+        _isLoading.value = true
+        try {
+            repository.insertSiswa(Siswa(nama = nama.trim(), email = email.trim()))
+            _uiMessages.value = Pair(null, "${nama.trim()} berhasil ditambahkan")
+        } catch (e: Exception) {
+            _uiMessages.value = Pair("Gagal: ${e.message}", null)
+        } finally {
+            _isLoading.value = false
+        }
+    }
+}</code></pre>
+
+<p>Validasi sinkron dilakukan sebelum <code>viewModelScope.launch</code> karena tidak butuh database. <code>try/catch/finally</code> memastikan <code>_isLoading</code> selalu di-reset ke <code>false</code> meski terjadi error.</p>
+
+<pre><code>class Factory(private val repository: SiswaRepository) : ViewModelProvider.Factory {
+    override fun &lt;T : ViewModel&gt; create(modelClass: Class&lt;T&gt;): T {
+        @Suppress("UNCHECKED_CAST")
+        return SiswaViewModel(repository) as T
+    }
+}</code></pre>
+
+<p><code>Factory</code> diperlukan karena ViewModel tidak bisa memiliki constructor dengan parameter selain <code>SavedStateHandle</code> secara default. Factory menyuntikkan <code>SiswaRepository</code> saat ViewModel dibuat.</p>
+
+<h3>ui/screens/SiswaListScreen.kt</h3>
+
+<pre><code>LaunchedEffect(uiState.successMessage, uiState.errorMessage) {
+    val message = uiState.successMessage ?: uiState.errorMessage
+    if (message != null) {
+        snackbarHostState.showSnackbar(message)
+        viewModel.clearMessages()
+    }
+}</code></pre>
+
+<p><code>LaunchedEffect</code> dieksekusi ulang setiap kali key-nya berubah. Setelah Snackbar ditampilkan, <code>clearMessages()</code> dipanggil agar pesan tidak muncul ulang saat recomposition berikutnya.</p>
+
+<pre><code>itemsIndexed(uiState.siswaList, key = { _, siswa -&gt; siswa.id }) { index, siswa -&gt;
+    AnimatedVisibility(
+        visible = true,
+        enter = fadeIn() + slideInVertically(initialOffsetY = { it / 2 })
+    ) {
+        SiswaCard(siswa = siswa, avatarColor = getAvatarColor(index), ...)
+    }
+}</code></pre>
+
+<p><code>key = { _, siswa -> siswa.id }</code> — Compose melacak setiap item berdasarkan ID unik. Saat item dihapus, hanya item yang berubah yang di-recompose dan animasi keluar dijalankan dengan benar.</p>
+<p><code>AnimatedVisibility</code> dengan <code>fadeIn() + slideInVertically</code> — Menggabungkan dua animasi masuk sekaligus menggunakan operator <code>+</code>.</p>
+
+<pre><code>private val avatarColorPalette = listOf(
+    Color(0xFFFF6B6B), Color(0xFF4ECDC4), Color(0xFF45B7D1), ...
+)
+private fun getAvatarColor(index: Int): Color = avatarColorPalette[index % avatarColorPalette.size]
+
+private fun getInitials(nama: String): String {
+    val words = nama.trim().split("\\s+".toRegex()).filter { it.isNotBlank() }
+    return when {
+        words.size >= 2 -> "${words[0].first().uppercaseChar()}${words[1].first().uppercaseChar()}"
+        words.size == 1 && words[0].length >= 2 -> words[0].take(2).uppercase()
+        else -> "?"
+    }
+}</code></pre>
+
+<p>Modulo <code>index % palette.size</code> memastikan indeks tidak pernah melebihi ukuran list warna. <code>getInitials</code> mengambil inisial dari kata pertama dan kedua, dengan fallback untuk nama satu kata atau string kosong.</p>
+
+<h3>ui/screens/FormSiswaScreen.kt</h3>
+
+<pre><code>val isEdit = siswaToEdit != null
+var nama by remember { mutableStateOf(siswaToEdit?.nama ?: "") }
+var email by remember { mutableStateOf(siswaToEdit?.email ?: "") }</code></pre>
+
+<p>Form ini dual-purpose: jika <code>siswaToEdit != null</code> maka mode Edit (field diisi data existing), jika null maka mode Tambah (field kosong).</p>
+
+<pre><code>Button(onClick = {
+    if (nama.isBlank()) {
+        namaError = "Nama tidak boleh kosong"
+    } else {
+        if (isEdit) {
+            viewModel.updateSiswa(siswaToEdit!!.copy(nama = nama.trim(), email = email.trim()))
+        } else {
+            viewModel.tambahSiswa(nama, email)
+        }
+        onBack()
+    }
+})</code></pre>
+
+<p><code>siswaToEdit!!.copy(nama = nama.trim(), email = email.trim())</code> — <code>copy()</code> dari data class mempertahankan <code>id</code> dan <code>createdAt</code> asli. Hanya <code>nama</code> dan <code>email</code> yang diubah. Operator <code>!!</code> aman di sini karena kita sudah tahu <code>isEdit == true</code> artinya <code>siswaToEdit != null</code>.</p>
+
+<pre><code>val previewInitials = if (nama.isNotBlank()) getInitials(nama) else "?"
+
+Box(modifier = Modifier.clip(CircleShape).background(previewColor)) {
+    Text(text = previewInitials, ...)
+}
+Text(text = nama.ifBlank { "Nama Siswa" }, ...)</code></pre>
+
+<p>Avatar preview real-time: saat user mengetik nama, avatar lingkaran dan teks di bawahnya langsung berubah. Ini terjadi karena <code>nama</code> adalah state lokal (<code>remember { mutableStateOf(...) }</code>) yang memicu recompose setiap kali berubah.</p>
+
+<h3>MainActivity.kt</h3>
+
+<pre><code>val db = AppDatabase.getInstance(this)
+val repository = SiswaRepository(db.siswaDao())
+val viewModel = ViewModelProvider(this, SiswaViewModel.Factory(repository))[SiswaViewModel::class.java]
+
+setContent {
+    MaterialTheme {
+        Surface {
+            var currentScreen by remember { mutableStateOf("list") }
+            var siswaToEdit by remember { mutableStateOf&lt;Siswa?&gt;(null) }
+
+            when (currentScreen) {
+                "list" -&gt; SiswaListScreen(
+                    viewModel = viewModel,
+                    onAddClick = { siswaToEdit = null; currentScreen = "form" },
+                    onEditClick = { siswa -&gt; siswaToEdit = siswa; currentScreen = "form" }
+                )
+                "form" -&gt; FormSiswaScreen(
+                    viewModel = viewModel,
+                    siswaToEdit = siswaToEdit,
+                    onBack = { currentScreen = "list" }
+                )
+            }
+        }
+    }
+}</code></pre>
+
+<p><strong>Manual Dependency Injection:</strong> Rantai <code>AppDatabase</code> &rarr; <code>SiswaRepository</code> &rarr; <code>SiswaViewModel</code> dibangun di MainActivity. <code>ViewModelProvider(this, Factory(repository))</code> memastikan ViewModel bertahan melewati rotasi layar.</p>
+<p><strong>Navigasi berbasis state:</strong> Alih-alih Navigation Compose, proyek ini menggunakan variabel <code>currentScreen: String</code> + blok <code>when</code>. Sederhana dan cukup untuk dua layar. <code>siswaToEdit</code> adalah "payload" yang dikirim ke form saat mode edit — jika null berarti tambah baru.</p>
+
+</body>
+</html>

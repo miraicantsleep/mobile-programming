@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coffee Bliss - Mini Project Evaluasi Akhir</title>
+</head>
+<body>
+
+<h1>Project 4 - Coffee Bliss (Digital Membership App)</h1>
+
+<blockquote>
+Referensi: <a href="https://kuliahppb.blogspot.com/2026/06/mini-project-untuk-evaluasi-akhir.html" target="_blank">Mini Project Evaluasi Akhir</a>
+</blockquote>
+
+<p>Proyek evaluasi akhir yang menggabungkan seluruh materi: MVVM, Room Database dengan multiple entitas dan foreign key, Jetpack Compose, dan Navigation Compose.</p>
+
+<h2>Konsep yang Digunakan</h2>
+
+<h3>Room dengan Multiple Entity dan Foreign Key</h3>
+<p>Proyek ini memiliki 3 tabel yang saling berelasi: <code>members</code>, <code>transaksi</code>, dan <code>redemptions</code>. Relasi antar tabel dijaga dengan <code>@ForeignKey</code>. Dengan <code>onDelete = CASCADE</code>, jika member dihapus maka semua transaksi dan redemption miliknya ikut terhapus otomatis.</p>
+
+<h3>Reaktif dengan flatMapLatest + combine</h3>
+<p><code>flatMapLatest</code> meluncurkan Flow baru setiap kali trigger berubah (misal: member login). <code>combine</code> menggabungkan beberapa Flow sekaligus — setiap kali salah satu berubah, hasilnya langsung dikirim ke UI. Bersama-sama, dua operator ini membuat UI selalu sinkron dengan database tanpa polling manual.</p>
+
+<h3>Navigation Compose dengan NavHost</h3>
+<p>Navigasi berbasis rute string dengan parameter dinamis. <code>popUpTo</code> membersihkan back stack agar user tidak bisa kembali ke layar login setelah masuk, atau ke layar main setelah logout.</p>
+
+<h3>Sistem Poin dan Status Membership</h3>
+<p>Setiap transaksi menambah poin (<code>belanja / 10.000</code>). Status member diperbarui otomatis berdasarkan total poin: Silver (0–199), Silver Plus (200–499), Gold (500+).</p>
+
+<hr>
+
+<h2>Penjelasan Kode</h2>
+
+<h3>data/local/entity/Member.kt</h3>
+
+<pre><code>@Entity(tableName = "members")
+data class Member(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val nama: String,
+    val email: String,
+    val noHp: String,
+    val nomorMember: String,
+    val totalPoin: Int = 0,
+    val status: String = "Silver",
+    val createdAt: Long = System.currentTimeMillis()
+)</code></pre>
+
+<p><code>totalPoin</code> dan <code>status</code> memiliki nilai default. Keduanya di-update bersamaan setiap kali transaksi ditambahkan, menggunakan <code>member.copy(totalPoin = newTotal, status = newStatus)</code>. <code>nomorMember</code> tidak auto-generate oleh Room — diisi oleh Repository dengan format <code>CB0001</code>.</p>
+
+<h3>data/local/entity/Transaksi.kt dan Redemption.kt</h3>
+
+<pre><code>@Entity(
+    tableName = "transaksi",
+    foreignKeys = [ForeignKey(
+        entity = Member::class,
+        parentColumns = ["id"],
+        childColumns = ["memberId"],
+        onDelete = ForeignKey.CASCADE
+    )]
+)
+data class Transaksi(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val memberId: Int,
+    val jumlahBelanja: Long,
+    val poinDidapat: Int,
+    val createdAt: Long = System.currentTimeMillis()
+)</code></pre>
+
+<p><code>@ForeignKey</code> mendefinisikan relasi: kolom <code>memberId</code> di tabel <code>transaksi</code> merujuk ke kolom <code>id</code> di tabel <code>members</code>. <code>onDelete = CASCADE</code> berarti Room menambahkan <code>ON DELETE CASCADE</code> ke DDL, sehingga penghapusan member otomatis menghapus semua transaksinya di level database.</p>
+<p><code>Redemption</code> menggunakan struktur yang sama — foreign key ke <code>members</code> dengan CASCADE delete. Menyimpan nama reward, poin yang digunakan, dan timestamp penukaran.</p>
+
+<h3>data/local/dao/MemberDao.kt</h3>
+
+<pre><code>@Dao
+interface MemberDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertMember(member: Member): Long
+
+    @Update
+    suspend fun updateMember(member: Member)
+
+    @Query("SELECT * FROM members WHERE email = :email LIMIT 1")
+    suspend fun getMemberByEmail(email: String): Member?
+
+    @Query("SELECT * FROM members WHERE id = :id")
+    fun getMemberById(id: Int): Flow&lt;Member?&gt;
+
+    @Query("SELECT COUNT(*) FROM members")
+    suspend fun getMemberCount(): Int
+}</code></pre>
+
+<p><code>getMemberByEmail</code> adalah <code>suspend</code> (one-shot) — digunakan untuk login dan cek duplikasi email saat registrasi.</p>
+<p><code>getMemberById</code> mengembalikan <code>Flow&lt;Member?&gt;</code> (reaktif) — setiap kali data member berubah (poin bertambah, status naik), UI otomatis diperbarui tanpa query ulang.</p>
+<p><code>getMemberCount</code> digunakan oleh Repository untuk menghitung nomor member berikutnya.</p>
+<p><code>TransaksiDao</code> dan <code>RedemptionDao</code> menggunakan <code>Flow&lt;List&lt;...&gt;&gt;</code> agar daftar di UI selalu sinkron dengan database.</p>
+
+<h3>data/local/AppDatabase.kt</h3>
+
+<pre><code>@Database(
+    entities = [Member::class, Transaksi::class, Redemption::class],
+    version = 1,
+    exportSchema = false
+)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun memberDao(): MemberDao
+    abstract fun transaksiDao(): TransaksiDao
+    abstract fun redemptionDao(): RedemptionDao
+    // ... Singleton pattern
+}</code></pre>
+
+<p>Mendaftarkan 3 entitas sekaligus di <code>entities</code>. Room akan membuat ketiga tabel beserta constraint foreign key-nya. Singleton dengan <code>@Volatile</code> dan <code>synchronized</code> untuk keamanan multi-thread.</p>
+
+<h3>data/repository/CoffeeRepository.kt</h3>
+
+<p><strong>Auto-generate nomor member:</strong></p>
+<pre><code>val count = memberDao.getMemberCount()
+val nomorMember = "CB%04d".format(count + 1)  // CB0001, CB0002, ...
+val member = Member(nama = nama, email = email, noHp = noHp, nomorMember = nomorMember)</code></pre>
+<p><code>%04d</code> — Format string yang menghasilkan angka 4 digit dengan leading zero (0001, 0002, dst).</p>
+
+<p><strong>Tambah transaksi + update poin dan status:</strong></p>
+<pre><code>suspend fun addTransaksiAndUpdatePoin(memberId: Int, jumlahBelanja: Long): Result&lt;Unit&gt; {
+    val member = memberDao.getMemberByEmail(...) ?: return Result.failure(...)
+    val poin = (jumlahBelanja / 10000).toInt()
+    val newTotal = member.totalPoin + poin
+    val newStatus = when {
+        newTotal >= 500 -> "Gold"
+        newTotal >= 200 -> "Silver Plus"
+        else -> "Silver"
+    }
+    transaksiDao.insertTransaksi(Transaksi(memberId = memberId, jumlahBelanja = jumlahBelanja, poinDidapat = poin))
+    memberDao.updateMember(member.copy(totalPoin = newTotal, status = newStatus))
+    return Result.success(Unit)
+}</code></pre>
+<p>Satu fungsi Repository mengeksekusi dua operasi DAO (insert transaksi + update member) secara berurutan. Logika perhitungan poin dan penentuan status ada di sini, bukan di ViewModel.</p>
+
+<p><strong>Redeem poin:</strong></p>
+<pre><code>suspend fun redeemPoin(memberId: Int, namaReward: String, poinDibutuhkan: Int): Result&lt;Unit&gt; {
+    val member = memberDao.getMemberById(memberId) ?: return Result.failure(...)
+    if (member.totalPoin &lt; poinDibutuhkan) {
+        return Result.failure(Exception("Poin tidak cukup"))
+    }
+    redemptionDao.insertRedemption(Redemption(memberId = memberId, namaReward = namaReward, poinDigunakan = poinDibutuhkan))
+    memberDao.updateMember(member.copy(totalPoin = member.totalPoin - poinDibutuhkan))
+    return Result.success(Unit)
+}</code></pre>
+<p>Validasi poin dilakukan sebelum insert. Jika lolos, poin dipotong dari total member menggunakan <code>copy()</code>.</p>
+
+<h3>viewmodel/CoffeeViewModel.kt</h3>
+
+<pre><code>private val _loggedInMemberId = MutableStateFlow&lt;Int?&gt;(null)
+
+init {
+    _loggedInMemberId
+        .filterNotNull()
+        .flatMapLatest { memberId -&gt;
+            combine(
+                repository.getMemberById(memberId),
+                repository.getTransaksi(memberId),
+                repository.getRedemptions(memberId)
+            ) { member, transaksi, redemptions -&gt;
+                Triple(member, transaksi, redemptions)
+            }
+        }
+        .onEach { (member, transaksi, redemptions) -&gt;
+            _uiState.update { it.copy(
+                currentMember = member,
+                transaksiList = transaksi,
+                redemptionList = redemptions
+            )}
+        }
+        .launchIn(viewModelScope)
+}</code></pre>
+
+<p><strong>Cara kerja aliran reaktif ini:</strong></p>
+<ol>
+  <li>Awalnya <code>_loggedInMemberId = null</code> — tidak ada Flow yang berjalan (<code>filterNotNull()</code> memblokir).</li>
+  <li>User login &rarr; <code>_loggedInMemberId.value = member.id</code> &rarr; <code>filterNotNull()</code> melewatkannya.</li>
+  <li><code>flatMapLatest</code> meluncurkan <code>combine(3 flows)</code> baru untuk member tersebut.</li>
+  <li><code>combine</code> menggabungkan data member, transaksi, redemption menjadi satu. Setiap kali salah satu berubah (poin bertambah, transaksi baru, dll), <code>combine</code> langsung memancarkan hasil baru.</li>
+  <li><code>onEach</code> mengupdate <code>_uiState</code>, UI langsung merender ulang.</li>
+  <li><code>launchIn(viewModelScope)</code> — Flow berhenti otomatis saat ViewModel di-destroy.</li>
+</ol>
+
+<pre><code>fun logout() {
+    _loggedInMemberId.value = null
+    _uiState.value = CoffeeUiState()
+}</code></pre>
+
+<p>Logout cukup dengan mengisi <code>null</code> ke <code>_loggedInMemberId</code> — <code>filterNotNull()</code> langsung memblokir Flow, semua data reaktif berhenti, dan UI state di-reset ke kondisi awal.</p>
+
+<h3>ui/screens/MembershipCardScreen.kt</h3>
+
+<pre><code>val gradient = Brush.linearGradient(
+    colors = when (member.status) {
+        "Gold"        -&gt; listOf(Color(0xFFB8860B), Color(0xFFFFD700))
+        "Silver Plus" -&gt; listOf(Color(0xFF708090), Color(0xFFC0C0C0))
+        else          -&gt; listOf(Color(0xFF4B2C20), Color(0xFF795548))
+    }
+)
+
+Box(modifier = Modifier.background(gradient)) { ... }</code></pre>
+
+<p><code>Brush.linearGradient</code> menghasilkan efek gradasi warna. Warna kartu berubah otomatis sesuai status member karena <code>member</code> berasal dari StateFlow yang reaktif — ketika poin bertambah dan status naik ke Gold, kartu langsung berubah warna.</p>
+
+<h3>ui/screens/TransaksiScreen.kt</h3>
+
+<pre><code>var jumlahBelanja by remember { mutableStateOf("") }
+val estimasiPoin = jumlahBelanja.toLongOrNull()?.div(10000)?.toInt() ?: 0
+
+if (estimasiPoin > 0) {
+    Text("Estimasi poin: +$estimasiPoin poin")
+}</code></pre>
+
+<p>Preview poin real-time saat user mengetik nominal transaksi. <code>toLongOrNull()</code> mengembalikan <code>null</code> jika string bukan angka valid, dan <code>?: 0</code> memberikan fallback 0.</p>
+<p><code>NumberFormat.getCurrencyInstance(Locale("id", "ID"))</code> digunakan untuk format tampilan daftar transaksi: <code>Rp150.000</code>.</p>
+
+<h3>ui/screens/RedemptionScreen.kt</h3>
+
+<pre><code>val canRedeem = (uiState.currentMember?.totalPoin ?: 0) >= reward.poinDibutuhkan
+
+Card(
+    colors = CardDefaults.cardColors(
+        containerColor = if (canRedeem) MaterialTheme.colorScheme.primaryContainer
+                         else MaterialTheme.colorScheme.surfaceVariant
+    )
+) {
+    Button(
+        onClick = { viewModel.redeemReward(reward.nama, reward.poinDibutuhkan) },
+        enabled = canRedeem
+    ) { Text("Tukar") }
+}</code></pre>
+
+<p>Warna card dan state tombol berubah otomatis berdasarkan kecukupan poin. Ini contoh state-driven UI: tidak ada kode imperatif yang secara eksplisit "mengubah warna" atau "disable tombol" — semuanya hasil dari kalkulasi <code>canRedeem</code>.</p>
+
+<h3>ui/screens/MainScreen.kt</h3>
+
+<pre><code>var selectedTab by remember { mutableStateOf(0) }
+
+NavigationBar {
+    listOf("Kartu", "Transaksi", "Reward").forEachIndexed { index, label -&gt;
+        NavigationBarItem(
+            selected = selectedTab == index,
+            onClick = { selectedTab = index },
+            icon = { Icon(...) },
+            label = { Text(label) }
+        )
+    }
+}
+
+when (selectedTab) {
+    0 -&gt; MembershipCardScreen(uiState, viewModel)
+    1 -&gt; TransaksiScreen(uiState, viewModel)
+    2 -&gt; RedemptionScreen(uiState, viewModel)
+}</code></pre>
+
+<p>Navigation bar dengan 3 tab diimplementasikan menggunakan state <code>selectedTab: Int</code> + blok <code>when</code>. <code>NavigationBarItem</code> otomatis menampilkan tab aktif (filled icon) vs tidak aktif (outlined icon) berdasarkan <code>selected = selectedTab == index</code>.</p>
+
+<h3>MainActivity.kt</h3>
+
+<pre><code>NavHost(navController = navController, startDestination = "welcome") {
+    composable("welcome") {
+        WelcomeScreen(
+            onLogin = { navController.navigate("login") },
+            onRegister = { navController.navigate("register") }
+        )
+    }
+    composable("login") { LoginScreen(...) }
+    composable("register") { RegisterScreen(...) }
+    composable("main") {
+        MainScreen(
+            uiState = uiState,
+            viewModel = viewModel,
+            onLogout = {
+                viewModel.logout()
+                navController.navigate("welcome") {
+                    popUpTo("welcome") { inclusive = true }
+                }
+            }
+        )
+    }
+}</code></pre>
+
+<p>Empat rute: <code>welcome</code>, <code>login</code>, <code>register</code>, <code>main</code>. Setelah login/register berhasil, navigasi ke <code>main</code> dengan <code>popUpTo("welcome") { inclusive = true }</code> — membersihkan seluruh back stack hingga <code>welcome</code> (termasuk welcome). Tombol Back di layar main tidak akan membawa kembali ke login.</p>
+<p>Saat logout, <code>viewModel.logout()</code> dipanggil terlebih dahulu untuk mereset state, baru navigasi kembali ke <code>welcome</code> dengan back stack yang bersih.</p>
+
+</body>
+</html>

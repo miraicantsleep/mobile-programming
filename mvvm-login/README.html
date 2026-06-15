@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MVVM Login - Project 2 Pemrograman Mobile</title>
+</head>
+<body>
+
+<h1>Project 2 - MVVM Login</h1>
+
+<blockquote>
+Referensi: <a href="https://kuliahppb.blogspot.com/2026/05/arsitektur-mvvm.html" target="_blank">Arsitektur MVVM</a>
+</blockquote>
+
+<h2>Konsep yang Digunakan</h2>
+
+<h3>Arsitektur MVVM</h3>
+<p>MVVM (Model - View - ViewModel) membagi kode menjadi tiga lapisan:</p>
+<ul>
+  <li><strong>Model</strong> - Data dan akses data: <code>User</code> (entity), <code>UserDao</code>, <code>AppDatabase</code>, <code>UserRepository</code>.</li>
+  <li><strong>ViewModel</strong> - Logika bisnis dan state UI: <code>LoginViewModel</code>. Tidak mengetahui keberadaan View secara langsung, hanya mengekspos state.</li>
+  <li><strong>View</strong> - UI: <code>LoginScreen</code>, <code>RegisterScreen</code>, <code>DashboardScreen</code>. Hanya menampilkan state dan meneruskan aksi user ke ViewModel.</li>
+</ul>
+<p>Alur data satu arah: View memanggil fungsi ViewModel &rarr; ViewModel menjalankan coroutine ke Repository &rarr; Repository mengakses DAO/Room &rarr; hasil dikembalikan sebagai StateFlow &rarr; View mengamati dengan <code>collectAsStateWithLifecycle()</code> dan merender ulang otomatis.</p>
+
+<h3>Room Database</h3>
+<p>Abstraction layer di atas SQLite. Terdiri dari tiga komponen: <code>@Entity</code> (model tabel), <code>@Dao</code> (antarmuka query), dan <code>@Database</code> (jembatan ke file SQLite). Anotasi diproses oleh KSP (Kotlin Symbol Processing) saat kompilasi untuk menghasilkan implementasi konkret.</p>
+
+<h3>Kotlin Coroutines + Flow</h3>
+<p>Coroutines memungkinkan operasi asinkron (seperti query database) tanpa memblokir main thread. Fungsi <code>suspend</code> dapat "dijeda" sambil menunggu hasil tanpa memblokir thread. StateFlow adalah aliran data reaktif yang selalu memiliki nilai terbaru dan bisa diobservasi oleh UI.</p>
+
+<h3>Sealed Class untuk UI State</h3>
+<p>Sealed class merepresentasikan semua kemungkinan state secara eksplisit. Compiler Kotlin memaksa penanganan semua state dalam blok <code>when</code>.</p>
+
+<hr>
+
+<h2>Penjelasan Kode</h2>
+
+<h3>data/local/entity/User.kt</h3>
+
+<pre><code>@Entity(tableName = "users")
+data class User(
+    @PrimaryKey(autoGenerate = true) val id: Int = 0,
+    val username: String,
+    val password: String,
+    val email: String,
+    val createdAt: Long = System.currentTimeMillis()
+)</code></pre>
+
+<p><code>@Entity(tableName = "users")</code> memberitahu Room bahwa class ini merepresentasikan tabel bernama <code>users</code>. Setiap field menjadi kolom tabel.</p>
+<p><code>@PrimaryKey(autoGenerate = true)</code> menandai <code>id</code> sebagai primary key dengan auto-increment. Default <code>0</code> agar tidak perlu diisi manual — Room menggantinya dengan ID baru.</p>
+<p><code>createdAt: Long = System.currentTimeMillis()</code> menyimpan timestamp pembuatan akun. Nilai default diisi otomatis sehingga tidak perlu dipass saat membuat objek <code>User</code>.</p>
+
+<h3>data/local/dao/UserDao.kt</h3>
+
+<pre><code>@Dao
+interface UserDao {
+    @Insert(onConflict = OnConflictStrategy.ABORT)
+    suspend fun insertUser(user: User): Long
+
+    @Query("SELECT * FROM users WHERE username = :username AND password = :password LIMIT 1")
+    suspend fun login(username: String, password: String): User?
+
+    @Query("SELECT * FROM users WHERE username = :username LIMIT 1")
+    suspend fun getUserByUsername(username: String): User?
+
+    @Query("SELECT COUNT(*) FROM users")
+    suspend fun getUserCount(): Int
+}</code></pre>
+
+<p><code>@Dao</code> — Room menggenerate implementasi konkret dari interface ini menggunakan KSP saat kompilasi.</p>
+<p><code>suspend fun</code> — Semua fungsi DAO adalah <code>suspend</code> karena dipanggil dari dalam Coroutine. Ini memastikan operasi database tidak berjalan di main thread.</p>
+<p><code>User?</code> (nullable) — Jika query tidak menemukan baris yang cocok, Room mengembalikan <code>null</code>. Ini cara idiomatik Kotlin untuk "data tidak ditemukan".</p>
+<p><code>OnConflictStrategy.ABORT</code> — Jika ada konflik primary key, operasi dibatalkan dan melempar exception.</p>
+<p><code>LIMIT 1</code> — Membatasi hasil query hanya 1 baris, cukup untuk keperluan login dan cek username.</p>
+
+<h3>data/local/AppDatabase.kt</h3>
+
+<pre><code>@Database(entities = [User::class], version = 1, exportSchema = false)
+abstract class AppDatabase : RoomDatabase() {
+    abstract fun userDao(): UserDao
+
+    companion object {
+        @Volatile private var INSTANCE: AppDatabase? = null
+
+        fun getInstance(context: Context): AppDatabase {
+            return INSTANCE ?: synchronized(this) {
+                Room.databaseBuilder(context.applicationContext, AppDatabase::class.java, "mvvm_login_db")
+                    .addCallback(object : Callback() {
+                        override fun onCreate(db: SupportSQLiteDatabase) {
+                            super.onCreate(db)
+                            CoroutineScope(Dispatchers.IO).launch {
+                                INSTANCE?.userDao()?.insertUser(
+                                    User(username = "demo", password = "demo123", email = "demo@example.com")
+                                )
+                            }
+                        }
+                    })
+                    .build().also { INSTANCE = it }
+            }
+        }
+    }
+}</code></pre>
+
+<p><strong>Singleton Pattern:</strong></p>
+<ul>
+  <li><code>@Volatile</code> — Memastikan nilai <code>INSTANCE</code> selalu dibaca dari memori utama, bukan cache CPU. Penting di lingkungan multi-thread.</li>
+  <li><code>synchronized(this)</code> — Hanya satu thread yang bisa masuk blok ini sekaligus, mencegah dua instance dibuat bersamaan.</li>
+  <li><code>INSTANCE ?: synchronized { ... }</code> — Pola double-checked locking: cek pertama tanpa lock (cepat), jika null baru masuk synchronized.</li>
+  <li><code>context.applicationContext</code> — Mencegah memory leak; tidak menyimpan referensi ke Activity yang bisa dihancurkan.</li>
+</ul>
+<p><code>addCallback.onCreate</code> — Dijalankan sekali saat database pertama kali dibuat. Digunakan untuk memasukkan akun demo (<code>demo</code>/<code>demo123</code>) agar langsung bisa dicoba.</p>
+
+<h3>data/repository/UserRepository.kt</h3>
+
+<pre><code>class UserRepository(private val userDao: UserDao) {
+
+    suspend fun login(username: String, password: String): User? {
+        return userDao.login(username, password)
+    }
+
+    suspend fun register(username: String, password: String, email: String): Result&lt;Unit&gt; {
+        return try {
+            val existing = userDao.getUserByUsername(username)
+            if (existing != null) {
+                Result.failure(Exception("Username '$username' sudah digunakan"))
+            } else {
+                userDao.insertUser(User(username = username, password = password, email = email))
+                Result.success(Unit)
+            }
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+}</code></pre>
+
+<p>Repository adalah <strong>single source of truth</strong> — ViewModel tidak pernah mengakses DAO langsung. Manfaatnya: jika sumber data diganti (misal dari Room ke API), hanya Repository yang perlu diubah.</p>
+<p><code>Result&lt;Unit&gt;</code> adalah tipe kembalian dari Kotlin Standard Library untuk membungkus hasil yang bisa berhasil (<code>Result.success</code>) atau gagal (<code>Result.failure</code>). Lebih elegan dari melempar exception ke ViewModel.</p>
+<p>Pengecekan username duplikat (<code>getUserByUsername</code>) adalah contoh logika bisnis di Repository, bukan di DAO maupun ViewModel.</p>
+
+<h3>viewmodel/LoginViewModel.kt</h3>
+
+<pre><code>sealed class LoginUiState {
+    object Idle : LoginUiState()
+    object Loading : LoginUiState()
+    data class Success(val user: User) : LoginUiState()
+    data class Error(val message: String) : LoginUiState()
+}
+
+sealed class RegisterUiState {
+    object Idle : RegisterUiState()
+    object Loading : RegisterUiState()
+    object Success : RegisterUiState()
+    data class Error(val message: String) : RegisterUiState()
+}
+
+class LoginViewModel(private val repository: UserRepository) : ViewModel() {
+
+    private val _loginState = MutableStateFlow&lt;LoginUiState&gt;(LoginUiState.Idle)
+    val loginState: StateFlow&lt;LoginUiState&gt; = _loginState.asStateFlow()
+
+    fun login(username: String, password: String) {
+        if (username.isBlank() || password.isBlank()) {
+            _loginState.value = LoginUiState.Error("Username dan password tidak boleh kosong")
+            return
+        }
+        viewModelScope.launch {
+            _loginState.value = LoginUiState.Loading
+            val user = repository.login(username.trim(), password.trim())
+            _loginState.value = if (user != null) LoginUiState.Success(user)
+                                 else LoginUiState.Error("Username atau password salah")
+        }
+    }
+
+    fun register(username: String, password: String, confirmPassword: String, email: String) {
+        when {
+            username.isBlank() || password.isBlank() || email.isBlank() -&gt;
+                _registerState.value = RegisterUiState.Error("Semua field wajib diisi")
+            password.length &lt; 6 -&gt;
+                _registerState.value = RegisterUiState.Error("Password minimal 6 karakter")
+            password != confirmPassword -&gt;
+                _registerState.value = RegisterUiState.Error("Password tidak cocok")
+            !email.contains("@") -&gt;
+                _registerState.value = RegisterUiState.Error("Format email tidak valid")
+            else -&gt; viewModelScope.launch {
+                _registerState.value = RegisterUiState.Loading
+                val result = repository.register(username.trim(), password.trim(), email.trim())
+                _registerState.value = if (result.isSuccess) RegisterUiState.Success
+                                       else RegisterUiState.Error(result.exceptionOrNull()?.message ?: "Gagal")
+            }
+        }
+    }
+}</code></pre>
+
+<p><strong>Sealed class</strong> — Mirip enum tetapi setiap subclass bisa memiliki data berbeda. Kompiler memaksa kita menangani semua kemungkinan dalam blok <code>when</code>, sehingga tidak ada state yang terlewat.</p>
+<p><strong>Enkapsulasi state:</strong> <code>_loginState</code> (private MutableStateFlow) hanya bisa diubah oleh ViewModel. UI menerima <code>loginState</code> (StateFlow read-only via <code>asStateFlow()</code>).</p>
+<p><strong>Validasi sinkron</strong> — Pengecekan input kosong dilakukan sebelum coroutine karena tidak perlu akses database.</p>
+<p><code>viewModelScope.launch</code> — Coroutine terikat lifecycle ViewModel; otomatis dibatalkan saat ViewModel dihancurkan, mencegah memory leak.</p>
+<p><code>_loginState.value = LoginUiState.Loading</code> — UI merespons dengan menampilkan <code>CircularProgressIndicator</code> dan menonaktifkan tombol.</p>
+
+<h3>ui/screens/LoginScreen.kt</h3>
+
+<pre><code>val loginState by viewModel.loginState.collectAsStateWithLifecycle()
+
+LaunchedEffect(loginState) {
+    if (loginState is LoginUiState.Success) {
+        onLoginSuccess((loginState as LoginUiState.Success).user.username)
+        viewModel.resetLoginState()
+    }
+}
+
+Button(
+    onClick = { viewModel.login(username, password) },
+    enabled = loginState !is LoginUiState.Loading
+) {
+    if (loginState is LoginUiState.Loading) {
+        CircularProgressIndicator(modifier = Modifier.size(20.dp))
+    } else {
+        Text("Masuk")
+    }
+}</code></pre>
+
+<p><code>collectAsStateWithLifecycle()</code> — Mengonversi StateFlow menjadi <code>State&lt;T&gt;</code> Compose. <code>WithLifecycle</code> berarti pengumpulan berhenti otomatis saat UI tidak aktif (app di-background), menghemat resource.</p>
+<p><code>LaunchedEffect(loginState)</code> — Side-effect yang berjalan dalam Coroutine setiap kali <code>loginState</code> berubah. Navigasi adalah side-effect, tidak boleh langsung di dalam fungsi composable.</p>
+<p><strong>State-driven UI</strong> — Tampilan dikendalikan sepenuhnya oleh state. Tombol otomatis disabled saat <code>Loading</code>, menampilkan spinner atau teks tergantung state.</p>
+<p><code>onLoginSuccess</code> adalah callback lambda dari <code>MainActivity</code>. Ini prinsip "event hoisting" — screen tidak perlu tahu tentang navigasi secara langsung.</p>
+
+<h3>ui/screens/RegisterScreen.kt</h3>
+
+<pre><code>OutlinedTextField(
+    value = password,
+    visualTransformation = if (passwordVisible) VisualTransformation.None else PasswordVisualTransformation(),
+    trailingIcon = {
+        IconButton(onClick = { passwordVisible = !passwordVisible }) {
+            Icon(if (passwordVisible) Icons.Default.VisibilityOff else Icons.Default.Visibility, ...)
+        }
+    }
+)</code></pre>
+
+<p><code>PasswordVisualTransformation()</code> mengganti setiap karakter dengan titik (•) secara visual tanpa mengubah nilai sebenarnya. <code>VisualTransformation.None</code> menampilkan teks apa adanya. Toggle ini memungkinkan user melihat/menyembunyikan password.</p>
+<p><code>verticalScroll(rememberScrollState())</code> membuat Column bisa di-scroll, diperlukan karena form registrasi panjang dan bisa melebihi tinggi layar.</p>
+
+<h3>ui/screens/DashboardScreen.kt</h3>
+
+<pre><code>@Composable
+fun DashboardScreen(username: String, onLogout: () -&gt; Unit) {
+    Column(...) {
+        Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)) {
+            Text("Username: $username")
+            Text("Status: Aktif")
+        }
+        OutlinedButton(onClick = onLogout) { Text("Keluar") }
+    }
+}</code></pre>
+
+<p>Layar ini tidak menerima ViewModel karena hanya menampilkan data statis (username yang sudah diketahui). <code>username</code> dikirim sebagai parameter biasa dari navigasi.</p>
+<p><code>MaterialTheme.colorScheme.primaryContainer</code> — Menggunakan warna dari theme aktif. Ini memastikan tampilan konsisten dan otomatis mendukung dark/light mode.</p>
+
+<h3>MainActivity.kt</h3>
+
+<pre><code>val db = AppDatabase.getInstance(this)
+val repository = UserRepository(db.userDao())
+val viewModel = ViewModelProvider(this, LoginViewModel.Factory(repository))[LoginViewModel::class.java]
+
+NavHost(navController = navController, startDestination = "login") {
+    composable("login") {
+        LoginScreen(
+            viewModel = viewModel,
+            onLoginSuccess = { username -&gt;
+                navController.navigate("dashboard/$username") {
+                    popUpTo("login") { inclusive = true }
+                }
+            },
+            onNavigateToRegister = { navController.navigate("register") }
+        )
+    }
+    composable("register") {
+        RegisterScreen(viewModel = viewModel, onBack = { navController.popBackStack() }, ...)
+    }
+    composable("dashboard/{username}") { backStack -&gt;
+        val username = backStack.arguments?.getString("username") ?: "User"
+        DashboardScreen(username = username) {
+            navController.navigate("login") {
+                popUpTo("dashboard/$username") { inclusive = true }
+            }
+        }
+    }
+}</code></pre>
+
+<p><strong>Manual Dependency Injection</strong> — Rantai dependency dibangun secara eksplisit: <code>AppDatabase</code> &rarr; <code>UserRepository</code> &rarr; <code>LoginViewModel</code> via Factory. Ini adalah cara sederhana tanpa framework DI seperti Hilt.</p>
+<p><code>class Factory : ViewModelProvider.Factory</code> — Diperlukan karena ViewModel tidak bisa memiliki constructor dengan parameter selain <code>SavedStateHandle</code> secara default.</p>
+<p><code>popUpTo("login") { inclusive = true }</code> — Menghapus layar login dari back stack setelah berhasil masuk. Ini mencegah user kembali ke layar login dengan menekan tombol Back dari Dashboard.</p>
+<p><code>navController.popBackStack()</code> — Kembali ke layar sebelumnya dengan menghapus layar saat ini dari back stack.</p>
+
+</body>
+</html>
