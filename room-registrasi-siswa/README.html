@@ -291,5 +291,12 @@ setContent {
 <p><strong>Manual Dependency Injection:</strong> Rantai <code>AppDatabase</code> &rarr; <code>SiswaRepository</code> &rarr; <code>SiswaViewModel</code> dibangun di MainActivity. <code>ViewModelProvider(this, Factory(repository))</code> memastikan ViewModel bertahan melewati rotasi layar.</p>
 <p><strong>Navigasi berbasis state:</strong> Alih-alih Navigation Compose, proyek ini menggunakan variabel <code>currentScreen: String</code> + blok <code>when</code>. Sederhana dan cukup untuk dua layar. <code>siswaToEdit</code> adalah "payload" yang dikirim ke form saat mode edit — jika null berarti tambah baru.</p>
 
+<hr>
+<h2>Referensi</h2>
+<ul>
+  <li><a href="https://kuliahppb.blogspot.com/2026/05/room-database-registrasi-siswa.html" target="_blank">Room Database Registrasi Siswa – kuliahppb.blogspot.com</a></li>
+  <li><a href="https://github.com/miraicantsleep/mobile-programming/tree/master/room-registrasi-siswa" target="_blank">Source Code – github.com/miraicantsleep/mobile-programming/room-registrasi-siswa</a></li>
+</ul>
+
 </body>
 </html>
