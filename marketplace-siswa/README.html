@@ -1,182 +1,297 @@
 <!DOCTYPE html>
 <html lang="id">
 <head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Marketplace Siswa - Project 1 Pemrograman Mobile</title>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>README – Marketplace Siswa</title>
+  <style>
+    body { font-family: 'Segoe UI', sans-serif; max-width: 860px; margin: 40px auto; padding: 0 20px; color: #333; line-height: 1.7; }
+    h1 { color: #6200EE; }
+    h2 { color: #6200EE; border-bottom: 2px solid #EADDff; padding-bottom: 4px; margin-top: 40px; }
+    h3 { color: #333; margin-top: 28px; }
+    code { background: #f4f0ff; padding: 2px 6px; border-radius: 4px; font-family: 'Consolas', monospace; font-size: 0.9em; }
+    pre { background: #f4f0ff; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 0.88em; }
+    .fr-tag { display: inline-block; background: #6200EE; color: #fff; font-size: 0.75em; padding: 2px 8px; border-radius: 12px; margin-right: 6px; }
+    .file-path { background: #e8f5e9; color: #2e7d32; padding: 2px 6px; border-radius: 4px; font-family: monospace; font-size: 0.88em; }
+    table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+    th { background: #6200EE; color: #fff; padding: 8px 12px; text-align: left; }
+    td { padding: 8px 12px; border-bottom: 1px solid #ddd; }
+    tr:nth-child(even) td { background: #f9f6ff; }
+  </style>
 </head>
 <body>
 
-<h1>Project 1 - Marketplace Siswa</h1>
+<div style="text-align: left;">Nama: Muhammad Nabil Afrizal Rahmadani</div><div style="text-align: left;">NRP: 5025231014</div>
 
-<blockquote>
-Referensi: <a href="https://kuliahppb.blogspot.com/2026/05/material-studi-kasus-marketplace-siswa.html" target="_blank">Material Design - Studi Kasus Marketplace Siswa</a>
-</blockquote>
-
-<h2>Konsep yang Digunakan</h2>
-
-<h3>Material Design 3 (M3)</h3>
-<p>Material Design 3 adalah sistem desain dari Google dengan tiga prinsip utama:</p>
+<h1>Marketplace Siswa</h1>
+<p>
+  Aplikasi Android sederhana berbasis <strong>Jetpack Compose</strong> yang memfasilitasi siswa untuk
+  <em>melihat</em> dan <em>menjual</em> produk di lingkungan sekolah. Proyek ini merupakan implementasi
+  studi kasus kelas <em>Pengembangan Mobile</em> berdasarkan referensi:
+</p>
 <ul>
-  <li><strong>Material as Metaphor</strong> - UI dianalogikan seperti benda nyata. <code>Card</code> dengan <code>elevation</code> menciptakan bayangan yang memberi kesan kartu melayang. <code>ExtendedFloatingActionButton</code> terlihat mengambang di atas konten.</li>
-  <li><strong>Bold, Graphic, Intentional</strong> - Warna kontras, tipografi jelas, hierarki visual yang menekankan konten penting. Harga produk ditampilkan dengan <code>FontWeight.Bold</code> berwarna <code>primary</code>.</li>
-  <li><strong>Motion Provides Meaning</strong> - Animasi membantu user memahami perubahan UI. Transisi antar layar menggunakan animasi default Navigation Compose. Ripple effect pada setiap komponen interaktif.</li>
+  <li>Blog: <a href="https://kuliahppb.blogspot.com/2026/05/material-studi-kasus-marketplace-siswa.html">Material Studi Kasus Marketplace Siswa</a></li>
+  <li>Spesifikasi PRD: <a href="https://drive.google.com/file/d/1-Qv943ejqHl6c4A1eYnXL_y-LMoTqxuQ/view">Modul Material Design &amp; Modern Android UI/UX</a></li>
+  <li>Kode referensi: <a href="https://drive.google.com/file/d/10OHSlACMjyyy-XQuVz_VHKgjAXiinHDU/view">Marketsiswa.pdf</a></li>
 </ul>
-<p>M3 menggunakan sistem warna pasangan: <code>primary</code> + <code>onPrimary</code> (warna teks di atas primary), <code>primaryContainer</code> + <code>onPrimaryContainer</code> (untuk area berwarna lembut seperti TopAppBar).</p>
 
-<h3>Jetpack Compose</h3>
-<p>Framework UI deklaratif Android modern. Alih-alih memanipulasi View secara imperatif, kita mendeskripsikan tampilan sebagai fungsi dari state. Ketika state berubah, Compose otomatis menggambar ulang (recompose) hanya bagian yang terpengaruh.</p>
+<h2>Functional Requirements (PRD)</h2>
+<table>
+  <tr><th>ID</th><th>Kebutuhan</th><th>Deskripsi</th></tr>
+  <tr><td>FR-01</td><td>Lihat Produk</td><td>Menampilkan daftar produk dalam Card UI (nama, harga, deskripsi singkat).</td></tr>
+  <tr><td>FR-02</td><td>Tambah Produk</td><td>Input nama, harga, deskripsi via FAB &rarr; form "Tambah Produk".</td></tr>
+  <tr><td>FR-03</td><td>Navigasi</td><td>Bottom Navigation antara tab <em>Home</em> dan <em>Profile</em>.</td></tr>
+  <tr><td>FR-04</td><td>Feedback Sistem</td><td>Loading indicator saat menyimpan produk &amp; Snackbar konfirmasi sukses.</td></tr>
+</table>
 
-<h3>ViewModel + StateFlow</h3>
-<p>ViewModel menyimpan dan mengelola UI state sehingga bertahan saat Activity diputar ulang (configuration change). StateFlow adalah aliran data reaktif yang selalu memiliki nilai terbaru — UI cukup mengamati (observe) flow ini dan otomatis diperbarui.</p>
+<h2>Arsitektur &amp; Struktur Proyek</h2>
+<p>Proyek mengikuti pola <strong>MVVM (Model–View–ViewModel)</strong> yang dipisah ke dalam beberapa package:</p>
+<pre>
+app/src/main/java/com/example/marketplacessiswa/
+├── data/
+│   └── Product.kt              ← Data Model
+├── viewmodel/
+│   └── MarketplaceViewModel.kt ← ViewModel (state &amp; logika)
+├── ui/
+│   ├── screens/
+│   │   ├── MainScreen.kt       ← Scaffold utama + navigasi
+│   │   ├── HomeScreen.kt       ← Daftar produk (FR-01)
+│   │   ├── AddProductScreen.kt ← Form tambah produk (FR-02, FR-04)
+│   │   └── ProfileScreen.kt   ← Profil pengguna (FR-03)
+│   └── theme/
+│       └── Theme.kt            ← Material Design 3 color scheme
+└── MainActivity.kt             ← Entry point Activity
+</pre>
 
-<h3>Navigation Compose</h3>
-<p>Library navigasi untuk Jetpack Compose. Setiap layar didefinisikan sebagai rute (string), dan <code>NavController</code> mengelola back stack perpindahan antar layar.</p>
+<h2>Penjelasan Kode Per File</h2>
 
-<hr>
-
-<h2>Penjelasan Kode</h2>
-
-<h3>data/Product.kt</h3>
-
-<pre><code>data class Product(
-    val id: Int,
-    val title: String,
-    val price: Int,
-    val description: String,
-    val category: String,
-    val seller: String,
-    val condition: String,
-    val emoji: String
-)</code></pre>
-
-<p><code>data class</code> di Kotlin secara otomatis menghasilkan <code>equals()</code>, <code>hashCode()</code>, <code>toString()</code>, dan <code>copy()</code>. Fungsi <code>copy()</code> berguna untuk membuat salinan objek dengan beberapa field berbeda tanpa mengubah yang lain.</p>
-<p><code>sampleProducts</code> adalah <code>List&lt;Product&gt;</code> top-level berisi 8 produk contoh. Ini berfungsi sebagai "database" statis karena proyek ini belum menggunakan Room.</p>
-
-<h3>viewmodel/MarketplaceViewModel.kt</h3>
-
-<pre><code>data class MarketplaceUiState(
-    val products: List&lt;Product&gt; = sampleProducts,
-    val searchQuery: String = "",
-    val selectedCategory: String = "Semua",
-    val filteredProducts: List&lt;Product&gt; = sampleProducts
+<h3><span class="file-path">data/Product.kt</span></h3>
+<p>Mendefinisikan <strong>data model</strong> produk yang digunakan di seluruh aplikasi.</p>
+<pre>
+data class Product(
+    val id: Long = System.currentTimeMillis(), // ID unik berbasis timestamp
+    val name: String,
+    val price: String,      // Disimpan sebagai String agar fleksibel ditampilkan
+    val description: String
 )
 
+val seedProducts = listOf(
+    Product(id = 1L, name = "Brownies Lumer", price = "15000", description = "..."),
+    Product(id = 2L, name = "Kaos Custom",    price = "85000", description = "...")
+)
+</pre>
+<ul>
+  <li><code>data class</code> – Kotlin idiom untuk class yang tugasnya hanya menyimpan data. Otomatis mendapat <code>equals()</code>, <code>hashCode()</code>, dan <code>copy()</code>.</li>
+  <li><code>id: Long = System.currentTimeMillis()</code> – Nilai default menggunakan timestamp saat objek dibuat, sehingga setiap produk baru mendapat ID unik tanpa database.</li>
+  <li><code>seedProducts</code> – Data awal yang langsung muncul saat aplikasi pertama kali dibuka (Brownies Lumer &amp; Kaos Custom sesuai kode referensi).</li>
+</ul>
+
+<h3><span class="file-path">viewmodel/MarketplaceViewModel.kt</span></h3>
+<p>Lapisan ViewModel bertanggung jawab atas <strong>state</strong> daftar produk dan operasi penambahan.</p>
+<pre>
 class MarketplaceViewModel : ViewModel() {
-    private val _uiState = MutableStateFlow(MarketplaceUiState())
-    val uiState: StateFlow&lt;MarketplaceUiState&gt; = _uiState.asStateFlow()
+    val products = mutableStateListOf&lt;Product&gt;().apply { addAll(seedProducts) }
 
-    private fun applyFilter() {
-        val state = _uiState.value
-        val filtered = sampleProducts.filter { product -&gt;
-            val matchesSearch = product.title.contains(state.searchQuery, ignoreCase = true) ||
-                    product.description.contains(state.searchQuery, ignoreCase = true)
-            val matchesCategory = state.selectedCategory == "Semua" || product.category == state.selectedCategory
-            matchesSearch &amp;&amp; matchesCategory
-        }
-        _uiState.value = state.copy(filteredProducts = filtered)
+    fun addProduct(name: String, price: String, description: String) {
+        products.add(0, Product(name = name, price = price, description = description))
     }
-}</code></pre>
+}
+</pre>
+<ul>
+  <li><code>ViewModel</code> – Bertahan selama rotasi layar (configuration change), sehingga data tidak hilang saat HP diputar.</li>
+  <li><code>mutableStateListOf</code> – List yang observable oleh Compose. Setiap perubahan memicu recompose UI yang bergantung padanya secara otomatis.</li>
+  <li><code>add(0, ...)</code> – Menyisipkan di indeks 0 agar produk terbaru tampil di paling atas daftar.</li>
+</ul>
 
-<p><code>MutableStateFlow</code> dibuat <code>private</code> agar hanya ViewModel yang bisa mengubah state (enkapsulasi). UI hanya menerima <code>StateFlow</code> read-only via <code>asStateFlow()</code>.</p>
-<p>Fungsi <code>applyFilter()</code> menerapkan filter dengan logika <strong>AND</strong>: produk harus memenuhi kondisi pencarian (di <code>title</code> atau <code>description</code>) DAN kondisi kategori. <code>ignoreCase = true</code> membuat pencarian tidak case-sensitive. <code>state.copy(filteredProducts = filtered)</code> membuat salinan state baru hanya dengan mengganti field <code>filteredProducts</code>.</p>
+<h3><span class="file-path">ui/screens/MainScreen.kt</span> <span class="fr-tag">FR-03</span><span class="fr-tag">FR-04</span></h3>
+<p>Komponen Scaffold utama yang mengatur topBar, bottomBar, FAB, dan snackbar.</p>
+<pre>
+@Composable
+fun MainScreen(viewModel: MarketplaceViewModel) {
+    var currentScreen by remember { mutableStateOf("home") }
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
 
-<h3>ui/theme/Theme.kt</h3>
+    Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+        topBar = { CenterAlignedTopAppBar(
+            title = { Text(if (currentScreen == "add") "Tambah Produk" else "MarketSiswa") },
+            navigationIcon = { /* tombol Back hanya di layar "add" */ }
+        )},
+        bottomBar = { NavigationBar {
+            NavigationBarItem(selected = currentScreen == "home", ...)  // [FR-03]
+            NavigationBarItem(selected = currentScreen == "profile", ...)
+        }},
+        floatingActionButton = {
+            if (currentScreen == "home") ExtendedFloatingActionButton(...)  // [FR-02]
+        }
+    ) { innerPadding -&gt;
+        when (currentScreen) {
+            "home"    -&gt; HomeScreen(products = viewModel.products)
+            "add"     -&gt; AddProductScreen(onProductAdded = { name, price, desc -&gt;
+                viewModel.addProduct(name, price, desc)
+                scope.launch {
+                    currentScreen = "home"
+                    snackbarHostState.showSnackbar("Produk berhasil ditambahkan!")  // [FR-04]
+                }
+            })
+            "profile" -&gt; ProfileScreen()
+        }
+    }
+}
+</pre>
+<ul>
+  <li><code>currentScreen</code> – Navigasi sederhana berbasis string state; tidak perlu <code>NavHost</code> karena alur linear.</li>
+  <li><code>CenterAlignedTopAppBar</code> – Judul berganti dinamis. Tombol Back muncul hanya di layar "add".</li>
+  <li><code>NavigationBar</code> – Bottom navigation Material Design 3 dengan indikator tab aktif <strong>(FR-03)</strong>.</li>
+  <li><code>ExtendedFloatingActionButton</code> "Jual" – Hanya muncul di Home sebagai entry point penambahan produk <strong>(FR-02)</strong>.</li>
+  <li><code>snackbarHostState.showSnackbar(...)</code> – Dijalankan dalam coroutine (<code>scope.launch</code>) karena merupakan fungsi <code>suspend</code> <strong>(FR-04)</strong>.</li>
+</ul>
 
-<pre><code>private val LightColors = lightColorScheme(
-    primary = Color(0xFF6750A4),
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFFEADDFF),
-    secondary = Color(0xFF625B71),
-    tertiary = Color(0xFF7D5260),
-    background = Color(0xFFFFFBFE),
-    surface = Color(0xFFFFFBFE),
-)
+<h3><span class="file-path">ui/screens/HomeScreen.kt</span> <span class="fr-tag">FR-01</span></h3>
+<p>Menampilkan sapaan dan daftar produk dalam Card yang bisa di-scroll.</p>
+<pre>
+@Composable
+fun HomeScreen(products: List&lt;Product&gt;) {
+    LazyColumn(contentPadding = PaddingValues(16.dp), ...) {
+        item { Text("Halo, Siswa!", fontWeight = ExtraBold) }
+        items(products) { product -&gt; ProductCard(product) }
+    }
+}
 
 @Composable
-fun MarketplaceSiswaTheme(content: @Composable () -&gt; Unit) {
-    MaterialTheme(colorScheme = LightColors, content = content)
-}</code></pre>
-
-<p>Setiap warna M3 memiliki pasangan: <code>primary</code> adalah warna aksi utama (tombol, ikon aktif), <code>onPrimary</code> adalah warna teks/ikon yang diletakkan di atasnya (selalu kontras). <code>primaryContainer</code> digunakan untuk area berwarna lembut seperti TopAppBar.</p>
-<p><code>MarketplaceSiswaTheme</code> adalah wrapper composable yang menerapkan skema warna ke seluruh hierarki komponen di dalamnya melalui <code>MaterialTheme</code>.</p>
-
-<h3>ui/screens/HomeScreen.kt</h3>
-
-<pre><code>Scaffold(
-    topBar = { TopAppBar(...) },
-    floatingActionButton = { ExtendedFloatingActionButton(...) }
-) { padding -&gt;
-    Column {
-        OutlinedTextField(...)       // Search bar
-        LazyRow { FilterChip(...) } // Chip kategori
-        LazyVerticalGrid(columns = GridCells.Fixed(2)) {
-            items(uiState.filteredProducts) { ProductCard(...) }
+private fun ProductCard(product: Product) {
+    Card(shape = RoundedCornerShape(16.dp)) {
+        Row {
+            Text(product.name, fontWeight = Bold, fontSize = 18.sp)
+            Text("Rp ${product.price}", color = primary, fontWeight = Black)
         }
+        Text(product.description, color = DarkGray, fontSize = 14.sp)
     }
-}</code></pre>
+}
+</pre>
+<ul>
+  <li><code>LazyColumn</code> – Setara <code>RecyclerView</code> di Compose. Hanya merender item yang terlihat di layar untuk performa scroll mulus (Non-Functional: smooth scrolling).</li>
+  <li><code>items(products)</code> – Menerima list langsung dari <code>mutableStateListOf</code> ViewModel; perubahan list memicu recompose otomatis tanpa <code>collectAsState</code>.</li>
+  <li><code>Card</code> dengan <code>RoundedCornerShape(16.dp)</code> – Menerapkan prinsip Material Design: rounded corner + shadow memberi kesan elevasi <strong>(FR-01)</strong>.</li>
+  <li>Hierarki teks (nama bold → harga berwarna → deskripsi abu-abu) menerapkan prinsip <em>Visual Hierarchy</em> dari PRD.</li>
+</ul>
 
-<p><code>Scaffold</code> adalah layout dasar Material 3 yang menangani penempatan <code>TopAppBar</code>, <code>FAB</code>, dan padding konten secara otomatis. Parameter <code>{ padding -&gt; }</code> berisi padding yang harus diaplikasikan ke konten agar tidak tertimpa TopAppBar.</p>
-<p><code>LazyRow</code> dan <code>LazyVerticalGrid</code> hanya merender item yang terlihat di layar (lazy loading), sehingga efisien untuk daftar panjang.</p>
-<p><code>FilterChip</code> dengan parameter <code>selected = uiState.selectedCategory == category</code> otomatis mengubah tampilannya (filled vs outlined) berdasarkan state tanpa kode tambahan.</p>
-<p><code>OutlinedTextField</code> bersifat stateless — state (<code>searchQuery</code>) disimpan di ViewModel, bukan di dalam composable. <code>viewModel::onSearchQueryChange</code> adalah method reference sebagai callback <code>onValueChange</code>.</p>
+<h3><span class="file-path">ui/screens/AddProductScreen.kt</span> <span class="fr-tag">FR-02</span><span class="fr-tag">FR-04</span></h3>
+<p>Form input untuk menambah produk baru dengan simulasi loading.</p>
+<pre>
+@Composable
+fun AddProductScreen(onProductAdded: (name, price, desc) -&gt; Unit) {
+    var name by remember { mutableStateOf("") }
+    var price by remember { mutableStateOf("") }
+    var desc  by remember { mutableStateOf("") }
+    var isLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
-<h3>ui/screens/ProductDetailScreen.kt</h3>
+    OutlinedTextField(value = name, label = { Text("Nama Produk") }, ...)
+    OutlinedTextField(
+        value = price,
+        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), ...)
+    OutlinedTextField(value = desc, minLines = 3, ...)
 
-<pre><code>var isFavorite by remember { mutableStateOf(false) }
-
-Icon(
-    if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-    tint = if (isFavorite) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurface
-)</code></pre>
-
-<p><code>remember { mutableStateOf(false) }</code> menyimpan state lokal di dalam composable. Berbeda dengan state di ViewModel, state ini hanya hidup selama composable ada di komposisi. Cocok untuk state yang tidak perlu di-share antar layar.</p>
-<p><code>by</code> (property delegation) memungkinkan akses langsung sebagai <code>isFavorite</code> alih-alih <code>isFavorite.value</code>.</p>
-<p><code>Icons.AutoMirrored.Filled.ArrowBack</code> — versi "auto-mirrored" secara otomatis membalik ikon untuk layout RTL (Right-to-Left, seperti bahasa Arab).</p>
-
-<pre><code>@Composable
-private fun InfoRow(label: String, value: String) {
-    Row(horizontalArrangement = Arrangement.SpaceBetween) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontWeight = FontWeight.Medium)
+    Button(
+        enabled = name.isNotBlank() &amp;&amp; price.isNotBlank() &amp;&amp; !isLoading,
+        onClick = {
+            isLoading = true
+            scope.launch {
+                delay(1000)                   // Simulasi proses [FR-04 State B]
+                onProductAdded(name, price, desc)
+                isLoading = false
+            }
+        }
+    ) {
+        if (isLoading) CircularProgressIndicator(modifier = Modifier.size(24.dp))
+        else Text("Simpan Produk")
     }
-}</code></pre>
+}
+</pre>
+<ul>
+  <li><code>OutlinedTextField</code> – Input Material Design 3 dengan label animasi, mewakili "Text Field" dari PRD.</li>
+  <li><code>KeyboardType.Number</code> – Memunculkan keyboard angka untuk field Harga, mencegah input teks tidak valid.</li>
+  <li><code>enabled = ... &amp;&amp; !isLoading</code> – Tombol Simpan hanya aktif bila nama &amp; harga terisi dan tidak sedang loading; mencegah submit ganda.</li>
+  <li><code>delay(1000)</code> – Simulasi latency proses selama 1 detik <strong>(FR-04 State B: Proses)</strong>.</li>
+  <li><code>CircularProgressIndicator</code> – Muncul menggantikan label tombol selama proses berlangsung <strong>(FR-04 loading indicator)</strong>.</li>
+</ul>
 
-<p>Composable <code>private</code> yang digunakan berulang untuk menampilkan pasangan label-nilai. Ini contoh <strong>reusability</strong> di Compose — logic yang berulang diekstrak menjadi fungsi tersendiri.</p>
+<h3><span class="file-path">ui/screens/ProfileScreen.kt</span> <span class="fr-tag">FR-03</span></h3>
+<p>Layar profil pengguna, tujuan tab kedua pada Bottom Navigation.</p>
+<pre>
+@Composable
+fun ProfileScreen() {
+    Column(horizontalAlignment = Alignment.CenterHorizontally,
+           verticalArrangement = Arrangement.Center) {
+        Icon(Icons.Default.AccountCircle, modifier = Modifier.size(100.dp), tint = Color.LightGray)
+        Text("John Siswa", fontWeight = FontWeight.Bold)
+        Text("XII RPL 1", color = Color.Gray)
+    }
+}
+</pre>
+<ul>
+  <li>Menampilkan identitas statis siswa (nama &amp; kelas) sebagai placeholder profil.</li>
+  <li>Merupakan tujuan tab "Profile" pada <code>NavigationBar</code> — memenuhi <strong>FR-03</strong>.</li>
+</ul>
 
-<h3>MainActivity.kt</h3>
+<h3><span class="file-path">ui/theme/Theme.kt</span></h3>
+<p>Mendefinisikan color scheme Material Design 3 sesuai kode referensi PDF.</p>
+<pre>
+private val LightColors = lightColorScheme(
+    primary   = Color(0xFF6200EE),  // Ungu – warna aksi utama (FAB, harga, tombol)
+    secondary = Color(0xFF03DAC6),  // Teal  – aksen sekunder
+    onPrimary = Color.White,
+    ...
+)
+</pre>
+<ul>
+  <li><code>lightColorScheme()</code> – Menghasilkan skema warna lengkap MD3 dari warna dasar yang ditetapkan.</li>
+  <li>Ungu (<code>#6200EE</code>) dan teal (<code>#03DAC6</code>) diambil langsung dari kode referensi Marketsiswa.pdf.</li>
+</ul>
 
-<pre><code>class MainActivity : ComponentActivity() {
+<h3><span class="file-path">MainActivity.kt</span></h3>
+<p>Entry point Activity yang menginisialisasi Compose dan ViewModel.</p>
+<pre>
+class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         setContent {
             MarketplaceSiswaTheme {
-                val navController = rememberNavController()
                 val viewModel: MarketplaceViewModel = viewModel()
-
-                NavHost(navController = navController, startDestination = "home") {
-                    composable("home") {
-                        HomeScreen(viewModel = viewModel, onProductClick = { product -&gt;
-                            navController.navigate("detail/${product.id}")
-                        })
-                    }
-                    composable("detail/{productId}") { backStack -&gt;
-                        val productId = backStack.arguments?.getString("productId")?.toIntOrNull()
-                        val product = sampleProducts.find { it.id == productId }
-                        if (product != null) {
-                            ProductDetailScreen(product = product, onBack = { navController.popBackStack() })
-                        }
-                    }
-                }
+                MainScreen(viewModel = viewModel)
             }
         }
     }
-}</code></pre>
+}
+</pre>
+<ul>
+  <li><code>enableEdgeToEdge()</code> – Konten meluas ke tepi layar untuk tampilan immersive modern.</li>
+  <li><code>viewModel()</code> – Membuat atau mendapatkan kembali instance ViewModel yang bertahan selama lifecycle Activity, sehingga data produk tidak hilang saat rotasi layar.</li>
+</ul>
 
-<p><code>enableEdgeToEdge()</code> membuat konten meluas ke area status bar dan navigation bar, memberikan tampilan modern full-screen.</p>
-<p><code>val viewModel: MarketplaceViewModel = viewModel()</code> — ViewModel dibuat di level <code>MainActivity</code> agar satu instance digunakan oleh semua layar. ViewModel bertahan melewati configuration change (rotasi layar).</p>
-<p><code>composable("detail/{productId}")</code> mendefinisikan rute dengan parameter dinamis. Parameter diakses lewat <code>backStack.arguments?.getString("productId")</code>. <code>?.toIntOrNull()</code> safely mengonversi string ke Int, mengembalikan <code>null</code> jika gagal.</p>
+<h2>Alur Pengguna (User Flow)</h2>
+<ol>
+  <li><strong>Buka app</strong> &rarr; HomeScreen menampilkan "Halo, Siswa!" dan dua produk awal dalam Card <strong>(FR-01)</strong>.</li>
+  <li><strong>Ketuk FAB "Jual"</strong> &rarr; layar beralih ke AddProductScreen dengan judul "Tambah Produk" <strong>(FR-02)</strong>.</li>
+  <li><strong>Isi form &rarr; Simpan Produk</strong> &rarr; tombol menampilkan <code>CircularProgressIndicator</code> selama 1 detik <strong>(FR-04 loading)</strong>, lalu kembali ke Home.</li>
+  <li><strong>Snackbar</strong> "Produk berhasil ditambahkan!" muncul dan produk baru tampil paling atas <strong>(FR-04 snackbar)</strong>.</li>
+  <li><strong>Tab "Profile"</strong> &rarr; ProfileScreen menampilkan John Siswa / XII RPL 1 <strong>(FR-03)</strong>.</li>
+</ol>
+
+<h2>Prinsip Material Design yang Diterapkan</h2>
+<table>
+  <tr><th>Prinsip</th><th>Implementasi</th></tr>
+  <tr><td>Card (elevation)</td><td><code>Card + RoundedCornerShape(16.dp)</code> di HomeScreen</td></tr>
+  <tr><td>FAB (primary action)</td><td><code>ExtendedFloatingActionButton</code> "Jual" di HomeScreen</td></tr>
+  <tr><td>Bottom Navigation</td><td><code>NavigationBar</code> dengan 2 tab: Home &amp; Profile</td></tr>
+  <tr><td>Visual Hierarchy</td><td>Ukuran &amp; warna teks bertingkat: nama (bold 18sp) &rarr; harga (primary) &rarr; deskripsi (grey 14sp)</td></tr>
+  <tr><td>Feedback (Snackbar)</td><td><code>SnackbarHost</code> konfirmasi "Produk berhasil ditambahkan!"</td></tr>
+  <tr><td>Loading State</td><td><code>CircularProgressIndicator</code> menggantikan label tombol saat menyimpan</td></tr>
+  <tr><td>Responsiveness</td><td><code>fillMaxWidth()</code> pada semua elemen; <code>LazyColumn</code> untuk performa scroll mulus</td></tr>
+</table>
 
 </body>
 </html>
